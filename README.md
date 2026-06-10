@@ -85,7 +85,7 @@ Colour coding is shown after results are entered:
 | Correct match outcome (win/draw/loss) | Yellow |
 | Wrong | Red |
 
-A points leaderboard can be added later — all the data is already stored.
+The **Leaderboard** page tallies every player's outcomes in these three categories (sorted by exact, then correct, then fewest wrong). It shows display names and favourite-team flags only — usernames never appear. A points system can be added later — all the data is already stored.
 
 ---
 
