@@ -27,6 +27,7 @@ In the Supabase SQL Editor, paste and run these files **in order**:
 1. `supabase/migrations/0001_schema.sql` — creates all tables, RLS policies, and the auth trigger
 2. `supabase/migrations/0002_seed_matches.sql` — inserts all 104 matches
 3. `supabase/migrations/0003_feedback.sql` — creates the feedback table
+4. `supabase/migrations/0004_profile_fields.sql` — adds display name + favourite team to profiles
 
 ### 3. Deploy to Vercel
 

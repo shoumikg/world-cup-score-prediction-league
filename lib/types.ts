@@ -25,6 +25,8 @@ export interface Prediction {
 export interface Profile {
   id: string
   username: string
+  display_name: string
+  favorite_team: string | null
   is_admin: boolean
   created_at: string
 }

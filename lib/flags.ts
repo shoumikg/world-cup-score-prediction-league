@@ -61,6 +61,9 @@ const FLAGS: Record<string, string> = {
   'Panama':             '🇵🇦',
 }
 
+/** All 48 qualified teams, alphabetical. */
+export const TEAM_NAMES = Object.keys(FLAGS).sort()
+
 /**
  * Returns the team name with its flag prepended, e.g. "🇧🇷 Brazil".
  * Falls back to `fallback` (no flag) when `team` is null/undefined or a
