@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { validateFeedback } from '@/lib/feedback'
+import { validateDisplayName, validateFavoriteTeam } from '@/lib/profile'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
@@ -98,6 +99,31 @@ export async function savePrediction(
   }
 
   revalidatePath('/')
+  return {}
+}
+
+// ── Profile ───────────────────────────────────────────────────
+
+export async function updateProfile(
+  displayName: string,
+  favoriteTeam: string
+): Promise<{ error?: string }> {
+  const name = validateDisplayName(displayName)
+  if ('error' in name) return { error: name.error }
+  const team = validateFavoriteTeam(favoriteTeam)
+  if ('error' in team) return { error: team.error }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ display_name: name.value, favorite_team: team.value })
+    .eq('id', user.id)
+
+  if (error) return { error: 'Failed to save profile. Please try again.' }
+  revalidatePath('/profile')
   return {}
 }
 

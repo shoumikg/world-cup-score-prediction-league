@@ -44,15 +44,16 @@ export default async function RootLayout({
           <nav className="bg-white border-b shadow-sm sticky top-0 z-20">
             <div className="max-w-4xl mx-auto px-4 h-12 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 sm:gap-4 shrink-0">
-                <span className="font-bold text-green-700 whitespace-nowrap">⚽ WC26</span>
+                <span className="font-bold text-green-700 whitespace-nowrap">⚽<span className="hidden sm:inline"> WC26</span></span>
                 <a href="/" className="text-sm text-gray-600 hover:text-gray-900">Schedule</a>
+                <a href="/groups" className="text-sm text-gray-600 hover:text-gray-900">Groups</a>
                 <a href="/guide" className="text-sm text-gray-600 hover:text-gray-900">Guide</a>
                 {profile?.is_admin && (
                   <a href="/admin" className="text-sm text-gray-600 hover:text-gray-900">Admin</a>
                 )}
               </div>
               <div className="flex items-center gap-3 min-w-0">
-                <span className="text-sm text-gray-500 truncate">{profile?.username}</span>
+                <a href="/profile" className="text-sm text-gray-500 hover:text-gray-900 truncate">{profile?.username}</a>
                 <form action={logout} className="shrink-0">
                   <button
                     type="submit"

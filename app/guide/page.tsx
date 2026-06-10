@@ -96,6 +96,23 @@ export default function GuidePage() {
         </p>
       </Section>
 
+      <Section title="Group tables">
+        <p>
+          The <strong>Groups</strong> page shows live standings for all 12 groups — matches played,
+          wins, draws, losses, goals and points. It updates automatically as results are entered.
+          Top two in each group qualify for the Round of 32, along with the eight best
+          third-placed teams.
+        </p>
+      </Section>
+
+      <Section title="Your profile">
+        <p>
+          Tap your username in the top-right corner to open your profile. There you can set a
+          <strong> display name</strong> — that's what other players see instead of your username —
+          and optionally pick a favourite team to show its flag next to your name.
+        </p>
+      </Section>
+
       <Section title="Found a bug? Have a suggestion?">
         <p>
           Use the <strong>💬 Feedback</strong> button at the bottom-right of any page — it works
