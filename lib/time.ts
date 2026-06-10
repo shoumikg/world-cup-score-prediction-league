@@ -33,3 +33,23 @@ export function istDateKey(utc: string): string {
 export function isKickedOff(utc: string): boolean {
   return new Date(utc) <= new Date()
 }
+
+// setTimeout delays above 2^31 - 1 ms (~24.8 days) overflow and fire
+// immediately, which would wrongly lock far-future matches
+const MAX_TIMEOUT_MS = 2 ** 31 - 1
+
+/**
+ * Delay for scheduling a client-side UI lock at kickoff.
+ * 'past'  — kickoff already passed, lock immediately
+ * number  — schedule the lock this many ms from now
+ * null    — too far out for a timer; the page will be reloaded long before
+ */
+export function kickoffTimerDelay(
+  utc: string,
+  now: number = Date.now()
+): number | 'past' | null {
+  const ms = new Date(utc).getTime() - now
+  if (ms <= 0) return 'past'
+  if (ms > MAX_TIMEOUT_MS) return null
+  return ms
+}
