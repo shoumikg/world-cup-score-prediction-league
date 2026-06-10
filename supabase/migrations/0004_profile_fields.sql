@@ -25,14 +25,31 @@ begin
 end;
 $$;
 
--- Backfill existing rows, then lock the column down
-update public.profiles set display_name = username;
+-- Backfill only rows that need it — idempotent, can never overwrite a
+-- user-chosen display name if this migration is ever re-run
+update public.profiles set display_name = username where display_name is null;
 
 alter table public.profiles
   alter column display_name set not null;
 
 alter table public.profiles
   add constraint display_name_length check (char_length(display_name) between 1 and 30);
+
+-- favorite_team must be one of the 48 qualified teams (or null).
+-- Keep in sync with lib/flags.ts — a unit test enforces this.
+alter table public.profiles
+  add constraint favorite_team_valid check (
+    favorite_team is null or favorite_team in (
+      'Algeria','Argentina','Australia','Austria','Belgium','Bosnia-Herzegovina',
+      'Brazil','Canada','Cape Verde','Colombia','Congo DR','Croatia','Curaçao',
+      'Czechia','Ecuador','Egypt','England','France','Germany','Ghana','Haiti',
+      'Iran','Iraq','Ivory Coast','Japan','Jordan','Mexico','Morocco',
+      'Netherlands','New Zealand','Norway','Panama','Paraguay','Portugal',
+      'Qatar','Saudi Arabia','Scotland','Senegal','South Africa','South Korea',
+      'Spain','Sweden','Switzerland','Tunisia','Türkiye','USA','Uruguay',
+      'Uzbekistan'
+    )
+  );
 
 -- Users may update ONLY display_name and favorite_team on their own row.
 -- Column-level grants prevent self-escalation via is_admin or username
