@@ -1,9 +1,10 @@
 'use client'
 
-import { useState, useTransition, useRef } from 'react'
+import { useState, useTransition, useRef, useEffect } from 'react'
 import { savePrediction } from '@/app/actions'
 import { stageLabel, scoreColor } from '@/lib/scoring'
 import { teamDisplay } from '@/lib/flags'
+import { kickoffTimerDelay } from '@/lib/time'
 import type { Match, Prediction } from '@/lib/types'
 
 interface Props {
@@ -23,7 +24,29 @@ export function MatchRow({ match, prediction, isLocked }: Props) {
   const [isPending, startTransition] = useTransition()
   const lastSaved = useRef({ home: homeVal, away: awayVal })
 
+  // The server-rendered isLocked is frozen at page load; flip the row to its
+  // locked state at the kickoff moment even if the tab stays open. The client
+  // clock is only a UX hint — the server action and RLS remain the authority.
+  const [clientLocked, setClientLocked] = useState(false)
+  useEffect(() => {
+    if (isLocked) return
+    const delay = kickoffTimerDelay(match.kickoff_utc)
+    if (delay === 'past') {
+      setClientLocked(true)
+      return
+    }
+    if (delay === null) return
+    const t = setTimeout(() => setClientLocked(true), delay)
+    return () => clearTimeout(t)
+  }, [isLocked, match.kickoff_utc])
+
+  const locked = isLocked || clientLocked
+
   function handleSave() {
+    if (kickoffTimerDelay(match.kickoff_utc) === 'past') {
+      setClientLocked(true)
+      return
+    }
     const h = parseInt(homeVal)
     const a = parseInt(awayVal)
     if (isNaN(h) || isNaN(a) || h < 0 || a < 0) {
@@ -34,6 +57,8 @@ export function MatchRow({ match, prediction, isLocked }: Props) {
       const res = await savePrediction(match.id, h, a)
       if (res.error) {
         setMsg({ text: res.error, ok: false })
+        // Server says the match started (e.g. client clock is behind) — lock the row
+        if (res.error.includes('locked')) setClientLocked(true)
       } else {
         lastSaved.current = { home: homeVal, away: awayVal }
         setMsg({ text: 'Saved!', ok: true })
@@ -43,6 +68,27 @@ export function MatchRow({ match, prediction, isLocked }: Props) {
   }
 
   const hasResult = match.home_score !== null
+
+  // True when the current inputs are exactly what's stored in the DB
+  const isRecorded =
+    lastSaved.current.home !== '' &&
+    homeVal === lastSaved.current.home &&
+    awayVal === lastSaved.current.away
+
+  // What the locked chip shows. Falls back to lastSaved for the window where
+  // the client lock flipped but the revalidated prediction prop hasn't
+  // arrived yet (saved after page load, locked at kickoff without reload).
+  const displayPred: Prediction | undefined =
+    prediction ??
+    (lastSaved.current.home !== ''
+      ? {
+          user_id: '',
+          match_id: match.id,
+          home_pred: parseInt(lastSaved.current.home),
+          away_pred: parseInt(lastSaved.current.away),
+          updated_at: '',
+        }
+      : undefined)
 
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-2 py-3 border-b last:border-0">
@@ -78,13 +124,13 @@ export function MatchRow({ match, prediction, isLocked }: Props) {
 
       {/* Prediction section */}
       <div className="flex items-center gap-2 shrink-0">
-        {isLocked ? (
+        {locked ? (
           <div className="flex items-center gap-1.5">
-            {prediction ? (
+            {displayPred ? (
               <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
-                hasResult ? scoreColor(prediction, match) : 'bg-gray-100 text-gray-700'
+                hasResult ? scoreColor(displayPred, match) : 'bg-gray-100 text-gray-700'
               }`}>
-                {prediction.home_pred}–{prediction.away_pred}
+                {displayPred.home_pred}–{displayPred.away_pred}
               </span>
             ) : (
               <span className="text-xs text-gray-300 italic">no pick</span>
@@ -122,10 +168,16 @@ export function MatchRow({ match, prediction, isLocked }: Props) {
             </button>
           </div>
         )}
-        {msg && (
+        {msg ? (
           <span className={`text-xs ${msg.ok ? 'text-green-600' : 'text-red-500'}`}>
             {msg.text}
           </span>
+        ) : (
+          !locked && isRecorded && (
+            <span className="text-xs text-green-600 whitespace-nowrap" title="Prediction recorded">
+              ✓ Recorded
+            </span>
+          )
         )}
       </div>
     </div>

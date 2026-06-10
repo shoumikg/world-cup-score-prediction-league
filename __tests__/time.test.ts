@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { istDateKey, isKickedOff } from '../lib/time'
+import { istDateKey, isKickedOff, kickoffTimerDelay } from '../lib/time'
 
 describe('istDateKey', () => {
   it('returns the UTC date for a match well within the same IST day', () => {
@@ -52,5 +52,31 @@ describe('isKickedOff', () => {
   it('returns true at the exact kickoff moment (boundary is inclusive)', () => {
     vi.setSystemTime(new Date('2026-06-11T19:00:00Z'))
     expect(isKickedOff('2026-06-11T19:00:00Z')).toBe(true)
+  })
+})
+
+describe('kickoffTimerDelay', () => {
+  const NOW = new Date('2026-06-11T19:00:00Z').getTime()
+
+  it("returns 'past' when kickoff has passed", () => {
+    expect(kickoffTimerDelay('2026-06-11T18:00:00Z', NOW)).toBe('past')
+  })
+
+  it("returns 'past' at the exact kickoff moment (consistent with isKickedOff)", () => {
+    expect(kickoffTimerDelay('2026-06-11T19:00:00Z', NOW)).toBe('past')
+  })
+
+  it('returns the exact remaining milliseconds for an upcoming match', () => {
+    expect(kickoffTimerDelay('2026-06-11T19:00:05Z', NOW)).toBe(5000)
+  })
+
+  it('returns null beyond the setTimeout overflow limit (~24.8 days)', () => {
+    // 30 days out would overflow a 32-bit timer delay and fire immediately
+    expect(kickoffTimerDelay('2026-07-11T19:00:00Z', NOW)).toBeNull()
+  })
+
+  it('returns a number just inside the overflow limit', () => {
+    const justInside = NOW + 2 ** 31 - 1
+    expect(kickoffTimerDelay(new Date(justInside).toISOString(), NOW)).toBe(2 ** 31 - 1)
   })
 })
