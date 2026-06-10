@@ -45,6 +45,7 @@ export default async function RootLayout({
               <div className="flex items-center gap-3 sm:gap-4 shrink-0">
                 <span className="font-bold text-green-700 whitespace-nowrap">⚽ WC26</span>
                 <a href="/" className="text-sm text-gray-600 hover:text-gray-900">Schedule</a>
+                <a href="/guide" className="text-sm text-gray-600 hover:text-gray-900">Guide</a>
                 {profile?.is_admin && (
                   <a href="/admin" className="text-sm text-gray-600 hover:text-gray-900">Admin</a>
                 )}
