@@ -83,6 +83,35 @@ A points leaderboard can be added later — all the data is already stored.
 
 ---
 
+## Account recovery
+
+Accounts use the synthetic email `username@league.local`, which can't receive emails. So Supabase's built-in "reset password" flow won't work — don't try it.
+
+### Friend forgot their password
+
+Go to **Supabase → Authentication → Users**, find their entry, click the three-dot menu → **Send password recovery** won't work — instead use **"Reset password"** directly in the dashboard to set a new one, then tell them via any channel.
+
+Alternatively, from the Supabase SQL Editor:
+
+```sql
+-- returns the auth UUID you need
+select id from auth.users where email = 'theirusername@league.local';
+```
+
+Then in **Authentication → Users** → find by that UUID → set a new password.
+
+> **Do not delete the user to "start fresh"** — the `profiles` table and `predictions` table both cascade-delete when the auth user is removed. They'd lose every prediction they've saved.
+
+### Invite code was leaked / shared too widely
+
+Change `LEAGUE_INVITE_CODE` in Vercel → **Settings → Environment Variables**, then redeploy (Vercel → **Deployments → Redeploy**). Existing accounts are unaffected — the code is only checked at signup.
+
+### Why password reset emails won't work
+
+The `@league.local` addresses are synthetic and go nowhere. Supabase will silently "send" the email with no error, but it never arrives. All password changes must go through the Supabase dashboard.
+
+---
+
 ## Local development
 
 ```bash
