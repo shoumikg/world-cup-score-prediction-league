@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/actions";
+import { FeedbackWidget } from "@/app/FeedbackWidget";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -65,6 +66,7 @@ export default async function RootLayout({
           </nav>
         )}
         <main className="flex-1">{children}</main>
+        <FeedbackWidget />
       </body>
     </html>
   );

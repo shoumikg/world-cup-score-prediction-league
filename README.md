@@ -26,6 +26,7 @@ In the Supabase SQL Editor, paste and run these files **in order**:
 
 1. `supabase/migrations/0001_schema.sql` — creates all tables, RLS policies, and the auth trigger
 2. `supabase/migrations/0002_seed_matches.sql` — inserts all 104 matches
+3. `supabase/migrations/0003_feedback.sql` — creates the feedback table
 
 ### 3. Deploy to Vercel
 
@@ -62,6 +63,10 @@ Once you're an admin, the **Admin** link appears in the navbar.
 ### Entering results
 
 After a match kicks off, go to Admin → "Enter / Update Results", type the final score, hit Save.
+
+### Reading feedback
+
+The 💬 Feedback button (every page, including login) saves messages to the `feedback` table. Read them in **Supabase → Table Editor → feedback**. Logged-in submissions carry the username; pre-login ones say `guest`.
 
 ### Filling in knockout teams
 
