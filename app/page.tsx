@@ -34,12 +34,12 @@ export default async function SchedulePage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-6">
         <h1 className="text-xl font-bold">Schedule & Predictions</h1>
         {nextMatch && (
           <a
             href={`#match-${nextMatch.id}`}
-            className="text-sm text-green-600 hover:underline"
+            className="text-sm text-green-600 hover:underline whitespace-nowrap"
           >
             Jump to next match →
           </a>
@@ -60,12 +60,12 @@ export default async function SchedulePage() {
 
       {Array.from(groups.entries()).map(([dateKey, dayMatches]) => (
         <section key={dateKey} className="mb-8">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 sticky top-0 bg-gray-50 py-1 z-10">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 sticky top-12 bg-gray-50 py-1 z-10">
             {formatDateIST(dayMatches[0].kickoff_utc)}
           </h2>
           <div className="bg-white rounded-xl border shadow-sm px-4">
             {dayMatches.map(m => (
-              <div key={m.id} id={`match-${m.id}`} className="scroll-mt-16">
+              <div key={m.id} id={`match-${m.id}`} className="scroll-mt-24">
                 <div className="text-xs text-gray-400 pt-3 pb-1">
                   {formatKickoffIST(m.kickoff_utc)} IST
                 </div>
