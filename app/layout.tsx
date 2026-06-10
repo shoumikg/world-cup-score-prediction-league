@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import { createClient } from "@/lib/supabase/server";
@@ -12,6 +12,10 @@ const geistSans = Geist({
 export const metadata: Metadata = {
   title: "WC26 Predictor",
   description: "FIFA World Cup 2026 score prediction mini league",
+};
+
+export const viewport: Viewport = {
+  colorScheme: "light",
 };
 
 export default async function RootLayout({
@@ -37,20 +41,20 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col bg-gray-50">
         {user && (
           <nav className="bg-white border-b shadow-sm sticky top-0 z-20">
-            <div className="max-w-4xl mx-auto px-4 h-12 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <span className="font-bold text-green-700">⚽ WC26</span>
+            <div className="max-w-4xl mx-auto px-4 h-12 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+                <span className="font-bold text-green-700 whitespace-nowrap">⚽ WC26</span>
                 <a href="/" className="text-sm text-gray-600 hover:text-gray-900">Schedule</a>
                 {profile?.is_admin && (
                   <a href="/admin" className="text-sm text-gray-600 hover:text-gray-900">Admin</a>
                 )}
               </div>
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-500">{profile?.username}</span>
-                <form action={logout}>
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="text-sm text-gray-500 truncate">{profile?.username}</span>
+                <form action={logout} className="shrink-0">
                   <button
                     type="submit"
-                    className="text-xs text-gray-400 hover:text-gray-700 transition-colors"
+                    className="text-xs text-gray-400 hover:text-gray-700 transition-colors whitespace-nowrap"
                   >
                     Log out
                   </button>
