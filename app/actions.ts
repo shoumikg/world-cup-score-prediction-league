@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { validateFeedback } from '@/lib/feedback'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
@@ -97,6 +98,34 @@ export async function savePrediction(
   }
 
   revalidatePath('/')
+  return {}
+}
+
+// ── Feedback ──────────────────────────────────────────────────
+
+export async function submitFeedback(rawMessage: string): Promise<{ error?: string }> {
+  const result = validateFeedback(rawMessage)
+  if ('error' in result) return { error: result.error }
+
+  const supabase = await createClient()
+
+  // Username comes from the session, never from the client
+  const { data: { user } } = await supabase.auth.getUser()
+  let username = 'guest'
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('username')
+      .eq('id', user.id)
+      .single()
+    username = profile?.username ?? 'guest'
+  }
+
+  const { error } = await supabase
+    .from('feedback')
+    .insert({ username, message: result.message })
+
+  if (error) return { error: 'Failed to send feedback. Please try again.' }
   return {}
 }
 

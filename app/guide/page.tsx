@@ -96,6 +96,13 @@ export default function GuidePage() {
         </p>
       </Section>
 
+      <Section title="Found a bug? Have a suggestion?">
+        <p>
+          Use the <strong>💬 Feedback</strong> button at the bottom-right of any page — it works
+          even before you log in. Type your message (up to 1000 characters) and hit Send.
+        </p>
+      </Section>
+
       <Section title="Scoring and leaderboard">
         <p>
           Colour coding is live. A full points leaderboard — showing everyone's running total
