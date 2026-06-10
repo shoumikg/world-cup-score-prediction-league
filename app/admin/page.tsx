@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { formatKickoffIST, isKickedOff } from '@/lib/time'
+import { teamDisplay } from '@/lib/flags'
 import { AdminResultForm } from './AdminResultForm'
 import { AdminKnockoutForm } from './AdminKnockoutForm'
 import type { Match } from '@/lib/types'
@@ -46,7 +47,7 @@ export default async function AdminPage() {
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-xs text-gray-400">#{m.id}</span>
                   <span className="text-sm font-medium">
-                    {m.home_team ?? m.home_source} vs {m.away_team ?? m.away_source}
+                    {teamDisplay(m.home_team, m.home_source ?? '')} vs {teamDisplay(m.away_team, m.away_source ?? '')}
                   </span>
                   <span className="text-xs text-gray-400 ml-auto">{formatKickoffIST(m.kickoff_utc)} IST</span>
                 </div>
