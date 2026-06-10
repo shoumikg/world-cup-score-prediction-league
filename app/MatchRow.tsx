@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useRef } from 'react'
 import { savePrediction } from '@/app/actions'
+import { stageLabel, scoreColor } from '@/lib/scoring'
 import type { Match, Prediction } from '@/lib/types'
 
 interface Props {
@@ -130,21 +131,3 @@ export function MatchRow({ match, prediction, isLocked }: Props) {
   )
 }
 
-function stageLabel(stage: string) {
-  const map: Record<string, string> = {
-    r32: 'R32', r16: 'R16', qf: 'QF', sf: 'SF', third: '3rd', final: 'Final',
-  }
-  return map[stage] ?? stage.toUpperCase()
-}
-
-function scoreColor(p: Prediction, m: Match): string {
-  if (m.home_score === null) return 'bg-gray-100 text-gray-700'
-  const exactHome = p.home_pred === m.home_score
-  const exactAway = p.away_pred === m.away_score
-  if (exactHome && exactAway) return 'bg-green-100 text-green-800'
-
-  const resultActual = Math.sign((m.home_score ?? 0) - (m.away_score ?? 0))
-  const resultPred = Math.sign(p.home_pred - p.away_pred)
-  if (resultActual === resultPred) return 'bg-yellow-100 text-yellow-800'
-  return 'bg-red-100 text-red-700'
-}
