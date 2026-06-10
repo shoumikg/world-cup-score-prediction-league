@@ -3,6 +3,7 @@
 import { useState, useTransition, useRef } from 'react'
 import { savePrediction } from '@/app/actions'
 import { stageLabel, scoreColor } from '@/lib/scoring'
+import { teamDisplay } from '@/lib/flags'
 import type { Match, Prediction } from '@/lib/types'
 
 interface Props {
@@ -12,8 +13,8 @@ interface Props {
 }
 
 export function MatchRow({ match, prediction, isLocked }: Props) {
-  const homeName = match.home_team ?? match.home_source ?? 'TBD'
-  const awayName = match.away_team ?? match.away_source ?? 'TBD'
+  const homeName = teamDisplay(match.home_team, match.home_source ?? 'TBD')
+  const awayName = teamDisplay(match.away_team, match.away_source ?? 'TBD')
   const isPlaceholder = !match.home_team
 
   const [homeVal, setHomeVal] = useState(prediction?.home_pred?.toString() ?? '')
