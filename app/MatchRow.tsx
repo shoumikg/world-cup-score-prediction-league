@@ -44,6 +44,12 @@ export function MatchRow({ match, prediction, isLocked }: Props) {
 
   const hasResult = match.home_score !== null
 
+  // True when the current inputs are exactly what's stored in the DB
+  const isRecorded =
+    lastSaved.current.home !== '' &&
+    homeVal === lastSaved.current.home &&
+    awayVal === lastSaved.current.away
+
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-2 py-3 border-b last:border-0">
       {/* Match meta */}
@@ -122,10 +128,16 @@ export function MatchRow({ match, prediction, isLocked }: Props) {
             </button>
           </div>
         )}
-        {msg && (
+        {msg ? (
           <span className={`text-xs ${msg.ok ? 'text-green-600' : 'text-red-500'}`}>
             {msg.text}
           </span>
+        ) : (
+          !isLocked && isRecorded && (
+            <span className="text-xs text-green-600 whitespace-nowrap" title="Prediction recorded">
+              ✓ Recorded
+            </span>
+          )
         )}
       </div>
     </div>

@@ -20,8 +20,11 @@ export default function GuidePage() {
           <li>Open the Schedule page (the default page after logging in).</li>
           <li>Find the match you want to predict — matches are grouped by date in IST.</li>
           <li>Type the home score in the left box and the away score in the right box.</li>
-          <li>Hit <strong>Save</strong>. You'll see a brief "Saved!" confirmation.</li>
-          <li>You can come back and change it any number of times before kickoff.</li>
+          <li>Hit <strong>Save</strong>. You'll see a brief "Saved!" confirmation, and a
+              <strong> ✓ Recorded</strong> marker stays next to the match.</li>
+          <li>You can come back and change it any number of times before kickoff. If you edit
+              the numbers, the marker disappears until you save again — if you see
+              ✓ Recorded, what's in the boxes is what counts.</li>
         </ol>
         <Note>
           The <strong>Jump to next match →</strong> link at the top of the page scrolls straight
