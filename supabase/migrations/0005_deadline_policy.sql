@@ -4,9 +4,22 @@
 --
 -- Formula: midnight IST of the match day  minus 3 hours  interpreted as IST.
 -- Example: matches on 12 Jun IST → deadline 11 Jun 21:00 IST = 11 Jun 15:30 UTC.
+--
+-- Safety notes:
+--   * The DROP POLICY statements remove access rules only — no prediction data
+--     is deleted or modified. The select policies are untouched.
+--   * The whole script runs in one transaction: either the old kickoff
+--     policies stay in force or the new deadline policies are active. There is
+--     never a window where the predictions table has no write policies.
+--   * Safe to re-run: all drops use IF EXISTS, including for the new policy
+--     names so the creates never collide.
 
-drop policy "predictions: insert before kickoff" on public.predictions;
-drop policy "predictions: update before kickoff" on public.predictions;
+begin;
+
+drop policy if exists "predictions: insert before kickoff" on public.predictions;
+drop policy if exists "predictions: update before kickoff" on public.predictions;
+drop policy if exists "predictions: insert before deadline" on public.predictions;
+drop policy if exists "predictions: update before deadline" on public.predictions;
 
 create policy "predictions: insert before deadline"
   on public.predictions for insert
@@ -38,3 +51,5 @@ create policy "predictions: update before deadline"
         ) at time zone 'Asia/Kolkata' > now()
     )
   );
+
+commit;
