@@ -4,6 +4,7 @@ import "./globals.css";
 import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/actions";
 import { FeedbackWidget } from "@/app/FeedbackWidget";
+import { Analytics } from "@vercel/analytics/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -74,6 +75,7 @@ export default async function RootLayout({
         )}
         <main className="flex-1">{children}</main>
         <FeedbackWidget />
+        <Analytics />
       </body>
     </html>
   );
