@@ -1,4 +1,5 @@
 const IST = 'Asia/Kolkata'
+const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000 // UTC+5:30
 
 export function formatKickoffIST(utc: string): string {
   return new Intl.DateTimeFormat('en-IN', {
@@ -23,15 +24,26 @@ export function formatDateIST(utc: string): string {
 
 // Returns 'YYYY-MM-DD' in IST for grouping matches by day
 export function istDateKey(utc: string): string {
-  const d = new Date(utc)
-  // IST = UTC + 5:30
-  const offset = 5 * 60 + 30
-  const local = new Date(d.getTime() + offset * 60 * 1000)
+  const local = new Date(new Date(utc).getTime() + IST_OFFSET_MS)
   return local.toISOString().slice(0, 10)
 }
 
 export function isKickedOff(utc: string): boolean {
   return new Date(utc) <= new Date()
+}
+
+// Returns the prediction deadline for a match's IST calendar day:
+// 9 PM IST on the calendar day before. All matches on the same IST day share
+// one deadline — predictions for the whole day close at once.
+export function predictionDeadlineUTC(kickoff_utc: string): Date {
+  const DAY_MS = 24 * 60 * 60 * 1000
+  const istMs = new Date(kickoff_utc).getTime() + IST_OFFSET_MS
+  const istMidnight = Math.floor(istMs / DAY_MS) * DAY_MS
+  return new Date(istMidnight - 3 * 60 * 60 * 1000 - IST_OFFSET_MS)
+}
+
+export function isDeadlinePassed(kickoff_utc: string): boolean {
+  return predictionDeadlineUTC(kickoff_utc) <= new Date()
 }
 
 // setTimeout delays above 2^31 - 1 ms (~24.8 days) overflow and fire

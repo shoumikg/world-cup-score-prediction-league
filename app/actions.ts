@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { validateFeedback } from '@/lib/feedback'
 import { validateDisplayName, validateFavoriteTeam } from '@/lib/profile'
+import { predictionDeadlineUTC } from '@/lib/time'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
@@ -70,7 +71,7 @@ export async function savePrediction(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not logged in.' }
 
-  // Server-side kickoff check (defense in depth — RLS is the authority)
+  // Server-side deadline check (defense in depth — RLS is the authority)
   const { data: match } = await supabase
     .from('matches')
     .select('kickoff_utc')
@@ -78,8 +79,8 @@ export async function savePrediction(
     .single()
 
   if (!match) return { error: 'Match not found.' }
-  if (new Date(match.kickoff_utc) <= new Date())
-    return { error: 'Match has already started — predictions are locked.' }
+  if (predictionDeadlineUTC(match.kickoff_utc) <= new Date())
+    return { error: 'Predictions are locked — the deadline has passed.' }
 
   const { error } = await supabase.from('predictions').upsert(
     {
@@ -93,8 +94,8 @@ export async function savePrediction(
   )
 
   if (error) {
-    if (error.message.includes('predictions_before_kickoff') || error.code === '42501')
-      return { error: 'Match has already started — predictions are locked.' }
+    if (error.code === '42501')
+      return { error: 'Predictions are locked — the deadline has passed.' }
     return { error: 'Failed to save prediction. Please try again.' }
   }
 
