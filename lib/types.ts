@@ -30,3 +30,9 @@ export interface Profile {
   is_admin: boolean
   created_at: string
 }
+
+export interface PickEntry {
+  displayName: string
+  favoriteTeam: string | null
+  prediction: { homePred: number; awayPred: number } | null
+}

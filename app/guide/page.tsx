@@ -72,13 +72,14 @@ export default function GuidePage() {
 
       <Section title="Seeing other people's picks">
         <p>
-          Other players' predictions are hidden until a match kicks off. The moment kickoff passes,
-          everyone's picks for that match become visible to everyone else. This prevents copying —
-          you can only compare after the fact.
+          Other players' predictions are hidden until the prediction deadline passes (9:00 PM IST
+          the day before). Once the deadline closes, expand the <strong>Everyone's picks</strong>
+          section under any locked match to see who predicted what — including who didn't submit
+          a pick. This prevents copying: predictions are already locked before they're revealed.
         </p>
         <Note>
-          The Schedule page shows your own predictions; the <strong>Leaderboard</strong> shows
-          how everyone's predictions have scored so far.
+          The Schedule page shows your own predictions alongside everyone else's (after deadline).
+          The <strong>Leaderboard</strong> shows how everyone's predictions have scored so far.
         </Note>
       </Section>
 
