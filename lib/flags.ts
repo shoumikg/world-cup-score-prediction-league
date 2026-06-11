@@ -64,6 +64,12 @@ const FLAGS: Record<string, string> = {
 /** All 48 qualified teams, alphabetical. */
 export const TEAM_NAMES = Object.keys(FLAGS).sort()
 
+/** Flag emoji only, e.g. "🇧🇷"; null for null/unknown teams. */
+export function teamFlag(team: string | null | undefined): string | null {
+  if (!team) return null
+  return FLAGS[team] ?? null
+}
+
 /**
  * Returns the team name with its flag prepended, e.g. "🇧🇷 Brazil".
  * Falls back to `fallback` (no flag) when `team` is null/undefined or a

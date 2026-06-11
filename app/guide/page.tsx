@@ -74,8 +74,8 @@ export default function GuidePage() {
           you can only compare after the fact.
         </p>
         <Note>
-          Currently, only your own predictions are shown on the Schedule page. A leaderboard
-          showing everyone's picks side by side is coming soon.
+          The Schedule page shows your own predictions; the <strong>Leaderboard</strong> shows
+          how everyone's predictions have scored so far.
         </Note>
       </Section>
 
@@ -125,8 +125,14 @@ export default function GuidePage() {
 
       <Section title="Scoring and leaderboard">
         <p>
-          Colour coding is live. A full points leaderboard — showing everyone's running total
-          across all matches — is coming soon.
+          The <strong>Leaderboard</strong> page shows every player's running tally in the same
+          three categories: exact scores (green), correct results (yellow), and wrong picks
+          (red). It's sorted by exact scores first, then correct results. Missed predictions
+          don't count against you — they simply score nothing.
+        </p>
+        <p className="mt-2">
+          Players appear by their <strong>display name</strong> (set on your profile page),
+          never their username. A points system may come later.
         </p>
       </Section>
     </div>
