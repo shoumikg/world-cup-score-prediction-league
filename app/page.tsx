@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
-import { istDateKey, formatDateIST, formatKickoffIST, isKickedOff } from '@/lib/time'
+import { istDateKey, formatDateIST, formatKickoffIST, isKickedOff, isDeadlinePassed, predictionDeadlineUTC } from '@/lib/time'
 import { MatchRow } from '@/app/MatchRow'
 import type { Match, Prediction } from '@/lib/types'
 
@@ -58,27 +58,34 @@ export default async function SchedulePage() {
         </span>
       </div>
 
-      {Array.from(groups.entries()).map(([dateKey, dayMatches]) => (
-        <section key={dateKey} className="mb-8">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 sticky top-12 bg-gray-50 py-1 z-10">
-            {formatDateIST(dayMatches[0].kickoff_utc)}
-          </h2>
-          <div className="bg-white rounded-xl border shadow-sm px-4">
-            {dayMatches.map(m => (
-              <div key={m.id} id={`match-${m.id}`} className="scroll-mt-24">
-                <div className="text-xs text-gray-400 pt-3 pb-1">
-                  {formatKickoffIST(m.kickoff_utc)} IST
+      {Array.from(groups.entries()).map(([dateKey, dayMatches]) => {
+        const deadline = predictionDeadlineUTC(dayMatches[0].kickoff_utc)
+        const deadlinePassed = deadline <= new Date()
+        return (
+          <section key={dateKey} className="mb-8">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 sticky top-12 bg-gray-50 py-1 z-10 flex items-baseline justify-between flex-wrap gap-x-3">
+              <span>{formatDateIST(dayMatches[0].kickoff_utc)}</span>
+              <span className={`text-xs font-normal normal-case tracking-normal ${deadlinePassed ? 'text-red-400' : 'text-gray-400'}`}>
+                Deadline {formatKickoffIST(deadline.toISOString())} IST{deadlinePassed ? ' · closed' : ''}
+              </span>
+            </h2>
+            <div className="bg-white rounded-xl border shadow-sm px-4">
+              {dayMatches.map(m => (
+                <div key={m.id} id={`match-${m.id}`} className="scroll-mt-24">
+                  <div className="text-xs text-gray-400 pt-3 pb-1">
+                    {formatKickoffIST(m.kickoff_utc)} IST
+                  </div>
+                  <MatchRow
+                    match={m}
+                    prediction={predMap.get(m.id)}
+                    isLocked={isDeadlinePassed(m.kickoff_utc)}
+                  />
                 </div>
-                <MatchRow
-                  match={m}
-                  prediction={predMap.get(m.id)}
-                  isLocked={isKickedOff(m.kickoff_utc)}
-                />
-              </div>
-            ))}
-          </div>
-        </section>
-      ))}
+              ))}
+            </div>
+          </section>
+        )
+      })}
     </div>
   )
 }

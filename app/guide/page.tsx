@@ -35,13 +35,16 @@ export default function GuidePage() {
 
       <Section title="Prediction deadline">
         <p>
-          Predictions lock automatically the moment a match kicks off — no exceptions. The input
-          boxes disappear and are replaced by your saved pick (shown as a chip). If you haven't
-          submitted anything by then, you get no score for that match.
+          Each day at <strong>9:00 PM IST</strong>, predictions for all matches taking place the
+          following calendar day (IST) are locked. The deadline applies to the entire day's
+          fixtures at once — not per match. The input boxes disappear and are replaced by your
+          saved pick (shown as a chip). If you haven't submitted anything by then, you get no
+          score for those matches.
         </p>
         <p className="mt-2">
-          The lock is enforced in the database, not just the UI, so there's no way to sneak in a
-          late prediction.
+          The deadline is shown in each day's section header on the Schedule page — it turns red
+          once it has passed. It is enforced in the database, not just the UI, so there is no way
+          to submit a late prediction.
         </p>
       </Section>
 

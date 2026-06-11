@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from 'react'
 import { savePrediction } from '@/app/actions'
 import { stageLabel, scoreColor } from '@/lib/scoring'
 import { teamDisplay } from '@/lib/flags'
-import { kickoffTimerDelay } from '@/lib/time'
+import { kickoffTimerDelay, predictionDeadlineUTC } from '@/lib/time'
 import type { Match, Prediction } from '@/lib/types'
 
 interface Props {
@@ -18,19 +18,21 @@ export function MatchRow({ match, prediction, isLocked }: Props) {
   const awayName = teamDisplay(match.away_team, match.away_source ?? 'TBD')
   const isPlaceholder = !match.home_team
 
+  const deadlineISO = predictionDeadlineUTC(match.kickoff_utc).toISOString()
+
   const [homeVal, setHomeVal] = useState(prediction?.home_pred?.toString() ?? '')
   const [awayVal, setAwayVal] = useState(prediction?.away_pred?.toString() ?? '')
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const [isPending, startTransition] = useTransition()
   const lastSaved = useRef({ home: homeVal, away: awayVal })
 
-  // The server-rendered isLocked is frozen at page load; flip the row to its
-  // locked state at the kickoff moment even if the tab stays open. The client
-  // clock is only a UX hint — the server action and RLS remain the authority.
+  // The server-rendered isLocked is frozen at page load; flip the row at the
+  // 9 PM IST deadline even if the tab stays open. Client clock is a UX hint
+  // only — the server action and RLS remain the authority.
   const [clientLocked, setClientLocked] = useState(false)
   useEffect(() => {
     if (isLocked) return
-    const delay = kickoffTimerDelay(match.kickoff_utc)
+    const delay = kickoffTimerDelay(deadlineISO)
     if (delay === 'past') {
       setClientLocked(true)
       return
@@ -38,12 +40,12 @@ export function MatchRow({ match, prediction, isLocked }: Props) {
     if (delay === null) return
     const t = setTimeout(() => setClientLocked(true), delay)
     return () => clearTimeout(t)
-  }, [isLocked, match.kickoff_utc])
+  }, [isLocked, deadlineISO])
 
   const locked = isLocked || clientLocked
 
   function handleSave() {
-    if (kickoffTimerDelay(match.kickoff_utc) === 'past') {
+    if (kickoffTimerDelay(deadlineISO) === 'past') {
       setClientLocked(true)
       return
     }

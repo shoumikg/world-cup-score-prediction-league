@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { istDateKey, isKickedOff, kickoffTimerDelay } from '../lib/time'
+import { istDateKey, isKickedOff, kickoffTimerDelay, predictionDeadlineUTC, isDeadlinePassed } from '../lib/time'
 
 describe('istDateKey', () => {
   it('returns the UTC date for a match well within the same IST day', () => {
@@ -78,5 +78,53 @@ describe('kickoffTimerDelay', () => {
   it('returns a number just inside the overflow limit', () => {
     const justInside = NOW + 2 ** 31 - 1
     expect(kickoffTimerDelay(new Date(justInside).toISOString(), NOW)).toBe(2 ** 31 - 1)
+  })
+})
+
+describe('predictionDeadlineUTC', () => {
+  it('returns 9 PM IST the previous day (15:30 UTC) for a mid-afternoon IST kickoff', () => {
+    // 14:00 IST June 12 = 08:30 UTC June 12 → deadline June 11 21:00 IST = 15:30 UTC
+    expect(predictionDeadlineUTC('2026-06-12T08:30:00Z').toISOString())
+      .toBe('2026-06-11T15:30:00.000Z')
+  })
+
+  it('uses the IST calendar date regardless of UTC date', () => {
+    // 19:30 IST June 12 = 14:00 UTC June 12 → same deadline as above
+    expect(predictionDeadlineUTC('2026-06-12T14:00:00Z').toISOString())
+      .toBe('2026-06-11T15:30:00.000Z')
+  })
+
+  it('all matches on the same IST day share one deadline', () => {
+    // First moment of June 12 IST = 18:30 UTC June 11; last predictable moment = just before midnight IST
+    const first = predictionDeadlineUTC('2026-06-11T18:30:00Z') // 00:00 IST June 12
+    const last  = predictionDeadlineUTC('2026-06-12T18:00:00Z') // 23:30 IST June 12
+    expect(first.toISOString()).toBe(last.toISOString())
+    expect(first.toISOString()).toBe('2026-06-11T15:30:00.000Z')
+  })
+
+  it('handles month-end rollover', () => {
+    // Match July 1 IST → deadline June 30 9 PM IST = June 30 15:30 UTC
+    expect(predictionDeadlineUTC('2026-07-01T00:00:00Z').toISOString())
+      .toBe('2026-06-30T15:30:00.000Z')
+  })
+})
+
+describe('isDeadlinePassed', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('returns false when the 9 PM IST deadline is still in the future', () => {
+    vi.setSystemTime(new Date('2026-06-11T14:30:00Z')) // 8 PM IST June 11
+    expect(isDeadlinePassed('2026-06-12T08:30:00Z')).toBe(false)
+  })
+
+  it('returns true when the deadline has passed', () => {
+    vi.setSystemTime(new Date('2026-06-11T16:30:00Z')) // 10 PM IST June 11
+    expect(isDeadlinePassed('2026-06-12T08:30:00Z')).toBe(true)
+  })
+
+  it('returns true at exactly the deadline moment (boundary inclusive)', () => {
+    vi.setSystemTime(new Date('2026-06-11T15:30:00Z')) // exactly 9 PM IST June 11
+    expect(isDeadlinePassed('2026-06-12T08:30:00Z')).toBe(true)
   })
 })
