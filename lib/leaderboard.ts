@@ -1,5 +1,6 @@
-import { scoreOutcome } from './scoring'
-import type { Match, Prediction } from './types'
+import { scoreOutcome, matchPoints } from './scoring'
+import { bonusPointsFor } from './bonus'
+import type { Match, Prediction, BonusGrade } from './types'
 
 export interface LeaderboardRow {
   userId: string
@@ -10,6 +11,9 @@ export interface LeaderboardRow {
   correct: number
   wrong: number
   scored: number
+  points: number      // match points only
+  bonusPoints: number // points from correctly-graded bonus answers
+  total: number       // points + bonusPoints
 }
 
 export interface LeaderboardProfile {
@@ -19,15 +23,17 @@ export interface LeaderboardProfile {
 }
 
 /**
- * Tallies every player's prediction outcomes over matches with results.
- * Players with no scored predictions still appear (all zeros). A missed
- * prediction counts as nothing — not as wrong.
- * Sort: exact desc, correct desc, wrong asc, display name A–Z.
+ * Tallies every player's prediction outcomes and bonus grades.
+ * Players with no predictions/grades still appear (all zeros). Missed
+ * predictions count as nothing — not as wrong. Ungraded bonus answers = 0.
+ * Sort: total pts desc, then exact desc, correct_gd desc, correct desc,
+ * wrong asc, display name A–Z.
  */
 export function computeLeaderboard(
   profiles: LeaderboardProfile[],
   predictions: Prediction[],
-  matches: Match[]
+  matches: Match[],
+  bonusGrades: Pick<BonusGrade, 'user_id' | 'question_id' | 'is_correct'>[] = []
 ): LeaderboardRow[] {
   const scoredMatches = new Map<number, Match>()
   for (const m of matches) {
@@ -40,11 +46,8 @@ export function computeLeaderboard(
       userId: p.id,
       displayName: p.display_name,
       favoriteTeam: p.favorite_team,
-      exact: 0,
-      correct_gd: 0,
-      correct: 0,
-      wrong: 0,
-      scored: 0,
+      exact: 0, correct_gd: 0, correct: 0, wrong: 0, scored: 0,
+      points: 0, bonusPoints: 0, total: 0,
     })
   }
 
@@ -56,14 +59,26 @@ export function computeLeaderboard(
     if (!outcome) continue
     row[outcome] += 1
     row.scored += 1
+    row.points += matchPoints(outcome, match.stage)
+  }
+
+  for (const g of bonusGrades) {
+    const row = rows.get(g.user_id)
+    if (!row || !g.is_correct) continue
+    row.bonusPoints += bonusPointsFor(g.question_id)
+  }
+
+  for (const row of rows.values()) {
+    row.total = row.points + row.bonusPoints
   }
 
   return [...rows.values()].sort(
     (a, b) =>
-      b.exact - a.exact ||
-      b.correct_gd - a.correct_gd ||
-      b.correct - a.correct ||
-      a.wrong - b.wrong ||
+      b.total       - a.total       ||
+      b.exact       - a.exact       ||
+      b.correct_gd  - a.correct_gd  ||
+      b.correct     - a.correct     ||
+      a.wrong       - b.wrong       ||
       a.displayName.localeCompare(b.displayName)
   )
 }

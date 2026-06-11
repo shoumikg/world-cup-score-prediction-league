@@ -10,6 +10,16 @@ export function stageLabel(stage: Stage | string): string {
 
 export type Outcome = 'exact' | 'correct_gd' | 'correct' | 'wrong'
 
+export const MATCH_POINTS: Record<'group' | 'knockout', Record<Outcome, number>> = {
+  group:    { exact: 10, correct_gd: 5, correct: 3, wrong: 0 },
+  knockout: { exact: 15, correct_gd: 8, correct: 5, wrong: 0 },
+}
+
+/** Points earned for a graded prediction. All non-group stages are knockout. */
+export function matchPoints(outcome: Outcome, stage: Stage): number {
+  return MATCH_POINTS[stage === 'group' ? 'group' : 'knockout'][outcome]
+}
+
 /** Grades a prediction against the match result; null when no result yet. */
 export function scoreOutcome(p: Prediction, m: Match): Outcome | null {
   if (m.home_score === null || m.away_score === null) return null

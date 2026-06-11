@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { validateFeedback } from '@/lib/feedback'
 import { validateDisplayName, validateFavoriteTeam } from '@/lib/profile'
 import { predictionDeadlineUTC } from '@/lib/time'
-import { validateBonusAnswer } from '@/lib/bonus'
+import { validateBonusAnswer, validateBonusGrade } from '@/lib/bonus'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
@@ -213,10 +213,13 @@ export async function saveResult(
   awayScore: number
 ): Promise<{ error?: string }> {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('is_admin')
+    .eq('id', user.id)
     .single()
 
   if (!profile?.is_admin) return { error: 'Unauthorized.' }
@@ -239,10 +242,13 @@ export async function saveKnockoutTeams(
   kickoffUtc?: string
 ): Promise<{ error?: string }> {
   const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
 
   const { data: profile } = await supabase
     .from('profiles')
     .select('is_admin')
+    .eq('id', user.id)
     .single()
 
   if (!profile?.is_admin) return { error: 'Unauthorized.' }
@@ -261,5 +267,46 @@ export async function saveKnockoutTeams(
   if (error) return { error: error.message }
   revalidatePath('/')
   revalidatePath('/admin')
+  return {}
+}
+
+export async function saveBonusGrade(
+  targetUserId: string,
+  questionId: number,
+  isCorrect: boolean
+): Promise<{ error?: string }> {
+  const validated = validateBonusGrade(questionId, isCorrect, targetUserId)
+  if ('error' in validated) return { error: validated.error }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile?.is_admin) return { error: 'Unauthorized.' }
+
+  const { error } = await supabase.from('bonus_grades').upsert(
+    {
+      user_id: validated.targetUserId,
+      question_id: validated.questionId,
+      is_correct: validated.isCorrect,
+      graded_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id,question_id' }
+  )
+
+  if (error) {
+    if (error.code === '23503') return { error: 'That player has no answer for this question.' }
+    if (error.code === '42501') return { error: 'Unauthorized.' }
+    return { error: 'Failed to save grade. Please try again.' }
+  }
+
+  revalidatePath('/admin')
+  revalidatePath('/leaderboard')
   return {}
 }

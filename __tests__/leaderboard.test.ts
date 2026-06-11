@@ -2,17 +2,26 @@ import { describe, it, expect } from 'vitest'
 import { computeLeaderboard } from '../lib/leaderboard'
 import { scoreOutcome } from '../lib/scoring'
 import { teamFlag } from '../lib/flags'
-import type { Match, Prediction } from '../lib/types'
+import type { Match, Prediction, Stage } from '../lib/types'
 
 // ── Fixtures ─────────────────────────────────────────────────
-function match(id: number, homeScore: number | null, awayScore: number | null): Match {
+function match(
+  id: number,
+  homeScore: number | null,
+  awayScore: number | null,
+  stage: Stage = 'group'
+): Match {
   return {
-    id, stage: 'group', group_name: 'A',
+    id, stage, group_name: stage === 'group' ? 'A' : null,
     kickoff_utc: '2026-06-11T19:00:00Z',
     home_team: 'Home', away_team: 'Away',
     home_source: null, away_source: null,
     venue: null, home_score: homeScore, away_score: awayScore,
   }
+}
+
+function grade(userId: string, questionId: number, isCorrect: boolean) {
+  return { user_id: userId, question_id: questionId, is_correct: isCorrect }
 }
 
 function pred(userId: string, matchId: number, home: number, away: number): Prediction {
@@ -195,5 +204,142 @@ describe('computeLeaderboard', () => {
     )
     expect(rows).toHaveLength(1)
     expect(rows[0].scored).toBe(0)
+  })
+
+  // ── match points ────────────────────────────────────────────
+
+  it('accumulates match points from group outcomes', () => {
+    // exact(10) + correct(3) = 13 pts
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice')],
+      [pred('u1', 1, 2, 1), pred('u1', 2, 1, 0)],
+      [match(1, 2, 1), match(2, 3, 1)]
+    )
+    expect(rows[0].points).toBe(13)
+    expect(rows[0].bonusPoints).toBe(0)
+    expect(rows[0].total).toBe(13)
+  })
+
+  it('uses knockout points for non-group stages', () => {
+    // group exact = 10, final exact = 15
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice')],
+      [pred('u1', 1, 2, 1), pred('u1', 2, 1, 0)],
+      [match(1, 2, 1, 'group'), match(2, 1, 0, 'final')]
+    )
+    expect(rows[0].points).toBe(10 + 15)
+  })
+
+  it('third-place match uses knockout points', () => {
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice')],
+      [pred('u1', 1, 2, 1)],
+      [match(1, 2, 1, 'third')]
+    )
+    expect(rows[0].points).toBe(15)
+  })
+
+  // ── bonus points ────────────────────────────────────────────
+
+  it('adds 25 bonusPoints for a correct Q1 grade', () => {
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice')],
+      [],
+      [],
+      [grade('u1', 1, true)]
+    )
+    expect(rows[0].bonusPoints).toBe(25)
+    expect(rows[0].total).toBe(25)
+  })
+
+  it('adds nothing for an incorrect grade', () => {
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice')],
+      [],
+      [],
+      [grade('u1', 1, false)]
+    )
+    expect(rows[0].bonusPoints).toBe(0)
+  })
+
+  it('adds nothing when no grade row exists (ungraded)', () => {
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice')],
+      [],
+      [],
+      []
+    )
+    expect(rows[0].bonusPoints).toBe(0)
+  })
+
+  it('omitting 4th arg gives bonusPoints 0 for everyone (backwards compat)', () => {
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice')],
+      [pred('u1', 1, 2, 1)],
+      [match(1, 2, 1)]
+    )
+    expect(rows[0].bonusPoints).toBe(0)
+    expect(rows[0].total).toBe(rows[0].points)
+  })
+
+  it('sums multiple correct bonus grades', () => {
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice')],
+      [],
+      [],
+      [grade('u1', 1, true), grade('u1', 2, true), grade('u1', 3, false)]
+    )
+    expect(rows[0].bonusPoints).toBe(50) // 25+25
+  })
+
+  it('ignores bonus grade for a user without a profile row', () => {
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice')],
+      [],
+      [],
+      [grade('ghost', 1, true)]
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].bonusPoints).toBe(0)
+  })
+
+  it('grade with unknown questionId contributes 0 (bonusPointsFor defensive)', () => {
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice')],
+      [],
+      [],
+      [grade('u1', 99, true)]
+    )
+    expect(rows[0].bonusPoints).toBe(0)
+  })
+
+  // ── total-first sort ─────────────────────────────────────────
+
+  it('ranks by total pts: bonus pts can outweigh match count advantage', () => {
+    // Alice: 1 exact = 10 pts. Bob: 1 correct (3 pts, pred 2-0 vs actual 2-1 — same
+    // direction but different GD) + Q1 correct (25 pts) = 28 pts.
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice'), profile('u2', 'Bob')],
+      [pred('u1', 1, 2, 1), pred('u2', 1, 2, 0)],
+      [match(1, 2, 1)],
+      [grade('u2', 1, true)]
+    )
+    expect(rows[0].displayName).toBe('Bob')
+    expect(rows[0].total).toBe(28)
+  })
+
+  it('breaks total tie by exact count', () => {
+    // Alice: 2×correct_gd = 10 pts, 0 exact. Bob: 1×exact = 10 pts, 1 exact.
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice'), profile('u2', 'Bob')],
+      [
+        pred('u1', 1, 2, 1), pred('u1', 2, 3, 2), // Alice: 2 correct_gd (GD match)
+        pred('u2', 3, 2, 1),                       // Bob: 1 exact
+      ],
+      [match(1, 3, 2), match(2, 4, 3), match(3, 2, 1)]
+    )
+    expect(rows[0].displayName).toBe('Bob')
+    expect(rows[0].total).toBe(rows[1].total) // same total
+    expect(rows[0].exact).toBe(1)
   })
 })
