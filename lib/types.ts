@@ -36,3 +36,17 @@ export interface PickEntry {
   favoriteTeam: string | null
   prediction: { homePred: number; awayPred: number } | null
 }
+
+export interface BonusAnswer {
+  user_id: string
+  question_id: number
+  answer_text: string | null
+  answer_team: string
+  updated_at: string
+}
+
+export interface BonusPickEntry {
+  displayName: string
+  favoriteTeam: string | null
+  answer: { text: string | null; team: string } | null
+}
