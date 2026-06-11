@@ -5,15 +5,18 @@ import { savePrediction } from '@/app/actions'
 import { stageLabel, scoreColor } from '@/lib/scoring'
 import { teamDisplay } from '@/lib/flags'
 import { kickoffTimerDelay, predictionDeadlineUTC } from '@/lib/time'
-import type { Match, Prediction } from '@/lib/types'
+import { teamFlag } from '@/lib/flags'
+import type { Match, Prediction, PickEntry } from '@/lib/types'
 
 interface Props {
   match: Match
   prediction: Prediction | undefined
   isLocked: boolean
+  picks?: PickEntry[]
+  totalPlayers?: number
 }
 
-export function MatchRow({ match, prediction, isLocked }: Props) {
+export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: Props) {
   const homeName = teamDisplay(match.home_team, match.home_source ?? 'TBD')
   const awayName = teamDisplay(match.away_team, match.away_source ?? 'TBD')
   const isPlaceholder = !match.home_team
@@ -92,96 +95,141 @@ export function MatchRow({ match, prediction, isLocked }: Props) {
         }
       : undefined)
 
+  const predictedCount = picks?.filter(p => p.prediction !== null).length ?? 0
+
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-2 py-3 border-b last:border-0">
-      {/* Match meta */}
-      <div className="flex items-center gap-2 min-w-0 flex-1">
-        <span className="text-xs text-gray-400 w-6 text-right shrink-0">#{match.id}</span>
-        <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${
-          match.stage === 'group'
-            ? 'bg-blue-100 text-blue-700'
-            : 'bg-purple-100 text-purple-700'
-        }`}>
-          {match.stage === 'group' ? `Grp ${match.group_name}` : stageLabel(match.stage)}
-        </span>
-
-        <span className={`text-sm font-medium truncate ${isPlaceholder ? 'text-gray-400 italic' : ''}`}>
-          {homeName}
-        </span>
-        <span className="text-xs text-gray-400 shrink-0">vs</span>
-        <span className={`text-sm font-medium truncate ${isPlaceholder ? 'text-gray-400 italic' : ''}`}>
-          {awayName}
-        </span>
-      </div>
-
-      {/* Venue */}
-      <span className="text-xs text-gray-400 hidden lg:block shrink-0 max-w-36 truncate">{match.venue}</span>
-
-      {/* Result (if entered) */}
-      {hasResult && (
-        <span className="text-sm font-bold text-gray-800 shrink-0 w-12 text-center">
-          {match.home_score}–{match.away_score}
-        </span>
-      )}
-
-      {/* Prediction section */}
-      <div className="flex items-center gap-2 shrink-0">
-        {locked ? (
-          <div className="flex items-center gap-1.5">
-            {displayPred ? (
-              <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
-                hasResult ? scoreColor(displayPred, match) : 'bg-gray-100 text-gray-700'
-              }`}>
-                {displayPred.home_pred}–{displayPred.away_pred}
-              </span>
-            ) : (
-              <span className="text-xs text-gray-300 italic">no pick</span>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5">
-            <input
-              type="number"
-              min={0}
-              max={99}
-              value={homeVal}
-              onChange={e => setHomeVal(e.target.value)}
-              disabled={isPending}
-              className="w-12 border rounded px-1.5 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
-              placeholder="–"
-            />
-            <span className="text-gray-400 text-xs">–</span>
-            <input
-              type="number"
-              min={0}
-              max={99}
-              value={awayVal}
-              onChange={e => setAwayVal(e.target.value)}
-              disabled={isPending}
-              className="w-12 border rounded px-1.5 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
-              placeholder="–"
-            />
-            <button
-              onClick={handleSave}
-              disabled={isPending}
-              className="text-xs bg-green-600 hover:bg-green-700 text-white px-2.5 py-1.5 rounded transition-colors disabled:opacity-50"
-            >
-              {isPending ? '…' : 'Save'}
-            </button>
-          </div>
-        )}
-        {msg ? (
-          <span className={`text-xs ${msg.ok ? 'text-green-600' : 'text-red-500'}`}>
-            {msg.text}
+    <div className="py-3 border-b last:border-0">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+        {/* Match meta */}
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="text-xs text-gray-400 w-6 text-right shrink-0">#{match.id}</span>
+          <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${
+            match.stage === 'group'
+              ? 'bg-blue-100 text-blue-700'
+              : 'bg-purple-100 text-purple-700'
+          }`}>
+            {match.stage === 'group' ? `Grp ${match.group_name}` : stageLabel(match.stage)}
           </span>
-        ) : (
-          !locked && isRecorded && (
-            <span className="text-xs text-green-600 whitespace-nowrap" title="Prediction recorded">
-              ✓ Recorded
-            </span>
-          )
+
+          <span className={`text-sm font-medium truncate ${isPlaceholder ? 'text-gray-400 italic' : ''}`}>
+            {homeName}
+          </span>
+          <span className="text-xs text-gray-400 shrink-0">vs</span>
+          <span className={`text-sm font-medium truncate ${isPlaceholder ? 'text-gray-400 italic' : ''}`}>
+            {awayName}
+          </span>
+        </div>
+
+        {/* Venue */}
+        <span className="text-xs text-gray-400 hidden lg:block shrink-0 max-w-36 truncate">{match.venue}</span>
+
+        {/* Result (if entered) */}
+        {hasResult && (
+          <span className="text-sm font-bold text-gray-800 shrink-0 w-12 text-center">
+            {match.home_score}–{match.away_score}
+          </span>
         )}
+
+        {/* Prediction section */}
+        <div className="flex items-center gap-2 shrink-0">
+          {locked ? (
+            <div className="flex items-center gap-1.5">
+              {displayPred ? (
+                <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
+                  hasResult ? scoreColor(displayPred, match) : 'bg-gray-100 text-gray-700'
+                }`}>
+                  {displayPred.home_pred}–{displayPred.away_pred}
+                </span>
+              ) : (
+                <span className="text-xs text-gray-300 italic">no pick</span>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number"
+                min={0}
+                max={99}
+                value={homeVal}
+                onChange={e => setHomeVal(e.target.value)}
+                disabled={isPending}
+                className="w-12 border rounded px-1.5 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
+                placeholder="–"
+              />
+              <span className="text-gray-400 text-xs">–</span>
+              <input
+                type="number"
+                min={0}
+                max={99}
+                value={awayVal}
+                onChange={e => setAwayVal(e.target.value)}
+                disabled={isPending}
+                className="w-12 border rounded px-1.5 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
+                placeholder="–"
+              />
+              <button
+                onClick={handleSave}
+                disabled={isPending}
+                className="text-xs bg-green-600 hover:bg-green-700 text-white px-2.5 py-1.5 rounded transition-colors disabled:opacity-50"
+              >
+                {isPending ? '…' : 'Save'}
+              </button>
+            </div>
+          )}
+          {msg ? (
+            <span className={`text-xs ${msg.ok ? 'text-green-600' : 'text-red-500'}`}>
+              {msg.text}
+            </span>
+          ) : (
+            !locked && isRecorded && (
+              <span className="text-xs text-green-600 whitespace-nowrap" title="Prediction recorded">
+                ✓ Recorded
+              </span>
+            )
+          )}
+        </div>
       </div>
+
+      {/* Everyone's picks — visible after deadline */}
+      {locked && picks && (
+        <details className="mt-2 pt-2 border-t">
+          <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none">
+            Everyone's picks ({predictedCount}{totalPlayers ? ` of ${totalPlayers}` : ''})
+          </summary>
+          <div className="mt-2 space-y-1.5 pb-1">
+            {picks.map((entry, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-xs text-gray-600 min-w-0 flex-1 truncate">
+                  {teamFlag(entry.favoriteTeam) && (
+                    <span className="mr-1">{teamFlag(entry.favoriteTeam)}</span>
+                  )}
+                  {entry.displayName}
+                </span>
+                {entry.prediction !== null ? (
+                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded shrink-0 ${
+                    hasResult
+                      ? scoreColor(
+                          {
+                            user_id: '',
+                            match_id: match.id,
+                            home_pred: entry.prediction.homePred,
+                            away_pred: entry.prediction.awayPred,
+                            updated_at: '',
+                          },
+                          match
+                        )
+                      : 'bg-gray-100 text-gray-700'
+                  }`}>
+                    {entry.prediction.homePred}–{entry.prediction.awayPred}
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-300 italic shrink-0">no pick</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   )
 }

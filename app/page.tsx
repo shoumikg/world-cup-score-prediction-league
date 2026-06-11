@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { istDateKey, formatDateIST, formatKickoffIST, isKickedOff, isDeadlinePassed, predictionDeadlineUTC } from '@/lib/time'
 import { MatchRow } from '@/app/MatchRow'
 import { DeadlineCountdown } from '@/app/DeadlineCountdown'
-import type { Match, Prediction } from '@/lib/types'
+import type { Match, Prediction, PickEntry } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,13 +12,25 @@ export default async function SchedulePage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null // middleware will redirect
 
-  const [{ data: matches }, { data: preds }] = await Promise.all([
+  const [{ data: matches }, { data: allPreds }, { data: profiles }] = await Promise.all([
     supabase.from('matches').select('*').order('kickoff_utc'),
-    supabase.from('predictions').select('*').eq('user_id', user.id),
+    supabase.from('predictions').select('*'), // RLS: own always + others' after deadline
+    supabase.from('profiles').select('id, display_name, favorite_team'),
   ])
 
+  type ProfileRow = { id: string; display_name: string; favorite_team: string | null }
+  const profileList = (profiles ?? []) as ProfileRow[]
+
+  // own prediction per match (always returned by RLS)
   const predMap = new Map<number, Prediction>()
-  for (const p of (preds ?? [])) predMap.set(p.match_id, p)
+  // flat lookup for building per-match pick lists
+  const predByMatchUser = new Map<string, { homePred: number; awayPred: number }>()
+  for (const p of (allPreds ?? []) as Prediction[]) {
+    if (p.user_id === user.id) predMap.set(p.match_id, p)
+    predByMatchUser.set(`${p.match_id}:${p.user_id}`, { homePred: p.home_pred, awayPred: p.away_pred })
+  }
+
+  const totalPlayers = profileList.length
 
   // Group matches by IST calendar date
   const groups = new Map<string, Match[]>()
@@ -71,18 +83,31 @@ export default async function SchedulePage() {
               </span>
             </h2>
             <div className="bg-white rounded-xl border shadow-sm px-4">
-              {dayMatches.map(m => (
-                <div key={m.id} id={`match-${m.id}`} className="scroll-mt-28">
-                  <div className="text-xs text-gray-400 pt-3 pb-1">
-                    {formatKickoffIST(m.kickoff_utc)} IST
+              {dayMatches.map(m => {
+                const picks: PickEntry[] | undefined = isDeadlinePassed(m.kickoff_utc)
+                  ? profileList
+                      .map(profile => ({
+                        displayName: profile.display_name,
+                        favoriteTeam: profile.favorite_team,
+                        prediction: predByMatchUser.get(`${m.id}:${profile.id}`) ?? null,
+                      }))
+                      .sort((a, b) => a.displayName.localeCompare(b.displayName))
+                  : undefined
+                return (
+                  <div key={m.id} id={`match-${m.id}`} className="scroll-mt-28">
+                    <div className="text-xs text-gray-400 pt-3 pb-1">
+                      {formatKickoffIST(m.kickoff_utc)} IST
+                    </div>
+                    <MatchRow
+                      match={m}
+                      prediction={predMap.get(m.id)}
+                      isLocked={isDeadlinePassed(m.kickoff_utc)}
+                      picks={picks}
+                      totalPlayers={totalPlayers}
+                    />
                   </div>
-                  <MatchRow
-                    match={m}
-                    prediction={predMap.get(m.id)}
-                    isLocked={isDeadlinePassed(m.kickoff_utc)}
-                  />
-                </div>
-              ))}
+                )
+              })}
             </div>
           </section>
         )
