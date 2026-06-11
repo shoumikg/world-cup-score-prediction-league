@@ -64,6 +64,9 @@ export default async function SchedulePage() {
           <span className="inline-block w-3 h-3 rounded bg-green-100 border border-green-300"></span> Exact score
         </span>
         <span className="flex items-center gap-1">
+          <span className="inline-block w-3 h-3 rounded bg-orange-100 border border-orange-300"></span> Correct GD
+        </span>
+        <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-3 rounded bg-yellow-100 border border-yellow-300"></span> Correct result
         </span>
         <span className="flex items-center gap-1">

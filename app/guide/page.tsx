@@ -56,8 +56,12 @@ export default function GuidePage() {
             <span><strong>Exact score</strong> — you predicted the precise scoreline.</span>
           </div>
           <div className="flex items-center gap-3">
+            <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold text-xs w-24 text-center shrink-0">3 – 2</span>
+            <span><strong>Correct goal difference</strong> — you got the right result and the right goal difference, but not the exact scoreline. (e.g. predict 2–1, actual 3–2; or predict 1–1, actual 2–2.)</span>
+          </div>
+          <div className="flex items-center gap-3">
             <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 font-semibold text-xs w-24 text-center shrink-0">1 – 0</span>
-            <span><strong>Correct result</strong> — you got the winner (or draw) right but not the exact score.</span>
+            <span><strong>Correct result</strong> — you got the winner (or draw) right but with the wrong goal difference.</span>
           </div>
           <div className="flex items-center gap-3">
             <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 font-semibold text-xs w-24 text-center shrink-0">0 – 2</span>
@@ -129,10 +133,11 @@ export default function GuidePage() {
 
       <Section title="Scoring and leaderboard">
         <p>
-          The <strong>Leaderboard</strong> page shows every player's running tally in the same
-          three categories: exact scores (green), correct results (yellow), and wrong picks
-          (red). It's sorted by exact scores first, then correct results. Missed predictions
-          don't count against you — they simply score nothing.
+          The <strong>Leaderboard</strong> page shows every player's running tally in four
+          categories: exact scores (green), correct goal difference (orange), correct results
+          (yellow), and wrong picks (red). It's sorted by exact scores first, then correct
+          goal difference, then correct results. Missed predictions don't count against you —
+          they simply score nothing.
         </p>
         <p className="mt-2">
           Players appear by their <strong>display name</strong> (set on your profile page),

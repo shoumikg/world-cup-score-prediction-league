@@ -43,6 +43,7 @@ export default async function LeaderboardPage() {
               <th className="text-left font-medium pl-4 py-2 w-10">#</th>
               <th className="text-left font-medium py-2">Player</th>
               <th className="font-medium w-16 py-2">Exact</th>
+              <th className="font-medium w-16 py-2">GD</th>
               <th className="font-medium w-16 py-2">Result</th>
               <th className="font-medium w-16 pr-4 py-2">Wrong</th>
             </tr>
@@ -63,6 +64,11 @@ export default async function LeaderboardPage() {
                   </span>
                 </td>
                 <td className="text-center py-2.5">
+                  <span className="inline-block min-w-7 px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold text-xs">
+                    {r.correct_gd}
+                  </span>
+                </td>
+                <td className="text-center py-2.5">
                   <span className="inline-block min-w-7 px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 font-semibold text-xs">
                     {r.correct}
                   </span>
@@ -79,7 +85,7 @@ export default async function LeaderboardPage() {
       </div>
 
       <p className="text-xs text-gray-400 mt-3">
-        Exact = predicted the precise scoreline · Result = right winner or draw, wrong score ·
+        Exact = precise scoreline · GD = correct result &amp; goal difference, wrong score · Result = right winner or draw, wrong GD ·
         Missed predictions don't count against you.
       </p>
     </div>

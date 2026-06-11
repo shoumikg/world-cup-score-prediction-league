@@ -6,6 +6,7 @@ export interface LeaderboardRow {
   displayName: string
   favoriteTeam: string | null
   exact: number
+  correct_gd: number
   correct: number
   wrong: number
   scored: number
@@ -40,6 +41,7 @@ export function computeLeaderboard(
       displayName: p.display_name,
       favoriteTeam: p.favorite_team,
       exact: 0,
+      correct_gd: 0,
       correct: 0,
       wrong: 0,
       scored: 0,
@@ -59,6 +61,7 @@ export function computeLeaderboard(
   return [...rows.values()].sort(
     (a, b) =>
       b.exact - a.exact ||
+      b.correct_gd - a.correct_gd ||
       b.correct - a.correct ||
       a.wrong - b.wrong ||
       a.displayName.localeCompare(b.displayName)

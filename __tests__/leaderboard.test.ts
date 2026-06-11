@@ -37,8 +37,20 @@ describe('scoreOutcome', () => {
     expect(scoreOutcome(pred('u', 1, 1, 0), match(1, 3, 1))).toBe('correct')
   })
 
-  it('returns correct for a draw predicted with different numbers', () => {
-    expect(scoreOutcome(pred('u', 1, 1, 1), match(1, 2, 2))).toBe('correct')
+  it('returns correct_gd for a draw predicted with different numbers (same GD=0)', () => {
+    expect(scoreOutcome(pred('u', 1, 1, 1), match(1, 2, 2))).toBe('correct_gd')
+  })
+
+  it('returns correct_gd for correct winner with matching GD', () => {
+    expect(scoreOutcome(pred('u', 1, 2, 1), match(1, 3, 2))).toBe('correct_gd')
+  })
+
+  it('returns correct for right winner with different GD', () => {
+    expect(scoreOutcome(pred('u', 1, 1, 0), match(1, 3, 1))).toBe('correct')
+  })
+
+  it('returns wrong for same GD but opposite result direction', () => {
+    expect(scoreOutcome(pred('u', 1, 2, 0), match(1, 0, 2))).toBe('wrong')
   })
 
   it('returns wrong when the result direction differs', () => {
@@ -78,12 +90,25 @@ describe('computeLeaderboard', () => {
       [profile('u1', 'Alice')],
       [
         pred('u1', 1, 2, 1), // exact
-        pred('u1', 2, 1, 0), // correct (actual 3-1)
+        pred('u1', 2, 1, 0), // correct (actual 3-1, different GD)
         pred('u1', 3, 0, 2), // wrong (actual 1-0)
       ],
       [match(1, 2, 1), match(2, 3, 1), match(3, 1, 0)]
     )
-    expect(rows[0]).toMatchObject({ exact: 1, correct: 1, wrong: 1, scored: 3 })
+    expect(rows[0]).toMatchObject({ exact: 1, correct_gd: 0, correct: 1, wrong: 1, scored: 3 })
+  })
+
+  it('tallies correct_gd outcome', () => {
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice')],
+      [
+        pred('u1', 1, 2, 1), // exact (2-1 = 2-1)
+        pred('u1', 2, 3, 2), // correct_gd (pred 3-2, actual 4-3: same GD=1, home win)
+        pred('u1', 3, 1, 1), // correct_gd (pred 1-1, actual 2-2: draw, GD=0)
+      ],
+      [match(1, 2, 1), match(2, 4, 3), match(3, 2, 2)]
+    )
+    expect(rows[0]).toMatchObject({ exact: 1, correct_gd: 2, correct: 0, wrong: 0, scored: 3 })
   })
 
   it('ignores predictions for matches without results', () => {
@@ -120,7 +145,19 @@ describe('computeLeaderboard', () => {
     expect(rows[0].displayName).toBe('Bob')
   })
 
-  it('breaks exact ties by correct count', () => {
+  it('breaks exact ties by correct_gd count', () => {
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice'), profile('u2', 'Bob')],
+      [
+        pred('u1', 1, 2, 1), pred('u2', 1, 2, 1),  // both exact on match 1
+        pred('u2', 2, 3, 2),                        // Bob correct_gd on match 2 (actual 4-3)
+      ],
+      [match(1, 2, 1), match(2, 4, 3)]
+    )
+    expect(rows[0].displayName).toBe('Bob')
+  })
+
+  it('breaks exact+correct_gd ties by correct count', () => {
     const rows = computeLeaderboard(
       [profile('u1', 'Alice'), profile('u2', 'Bob')],
       [
