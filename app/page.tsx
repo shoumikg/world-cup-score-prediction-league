@@ -64,7 +64,7 @@ export default async function SchedulePage() {
         const deadlinePassed = deadline <= new Date()
         return (
           <section key={dateKey} className="mb-8">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 sticky top-12 bg-gray-50 py-1 z-10 flex items-baseline justify-between flex-wrap gap-x-3">
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 sticky top-20 bg-gray-50 py-1 z-10 flex items-baseline justify-between flex-wrap gap-x-3">
               <span>{formatDateIST(dayMatches[0].kickoff_utc)}</span>
               <span className={`text-xs font-normal normal-case tracking-normal ${deadlinePassed ? 'text-red-400' : 'text-gray-400'}`}>
                 Deadline {formatKickoffIST(deadline.toISOString())} IST{deadlinePassed ? ' · closed' : <DeadlineCountdown deadlineISO={deadline.toISOString()} />}
@@ -72,7 +72,7 @@ export default async function SchedulePage() {
             </h2>
             <div className="bg-white rounded-xl border shadow-sm px-4">
               {dayMatches.map(m => (
-                <div key={m.id} id={`match-${m.id}`} className="scroll-mt-24">
+                <div key={m.id} id={`match-${m.id}`} className="scroll-mt-28">
                   <div className="text-xs text-gray-400 pt-3 pb-1">
                     {formatKickoffIST(m.kickoff_utc)} IST
                   </div>

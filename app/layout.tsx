@@ -42,27 +42,31 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col bg-gray-50">
         {user && (
           <nav className="bg-white border-b shadow-sm sticky top-0 z-20">
-            <div className="max-w-4xl mx-auto px-4 h-12 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 sm:gap-4 min-w-0 overflow-x-auto">
-                <span className="font-bold text-green-700 whitespace-nowrap">⚽<span className="hidden sm:inline"> WC26</span></span>
-                <a href="/" className="text-sm text-gray-600 hover:text-gray-900 whitespace-nowrap">Schedule</a>
-                <a href="/leaderboard" className="text-sm text-gray-600 hover:text-gray-900 whitespace-nowrap">Leaderboard</a>
-                <a href="/groups" className="text-sm text-gray-600 hover:text-gray-900 whitespace-nowrap">Groups</a>
-                <a href="/guide" className="text-sm text-gray-600 hover:text-gray-900 whitespace-nowrap">Guide</a>
-                {profile?.is_admin && (
-                  <a href="/admin" className="text-sm text-gray-600 hover:text-gray-900 whitespace-nowrap">Admin</a>
-                )}
+            <div className="max-w-4xl mx-auto px-4">
+              {/* Row 1: logo + user actions */}
+              <div className="h-12 flex items-center justify-between gap-3">
+                <span className="font-bold text-green-700">⚽ WC26</span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <a href="/profile" className="text-sm text-gray-500 hover:text-gray-900 truncate max-w-24 sm:max-w-none">{profile?.username}</a>
+                  <form action={logout} className="shrink-0">
+                    <button
+                      type="submit"
+                      className="text-xs text-gray-400 hover:text-gray-700 transition-colors whitespace-nowrap"
+                    >
+                      Log out
+                    </button>
+                  </form>
+                </div>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <a href="/profile" className="text-sm text-gray-500 hover:text-gray-900 truncate max-w-24 sm:max-w-none">{profile?.username}</a>
-                <form action={logout} className="shrink-0">
-                  <button
-                    type="submit"
-                    className="text-xs text-gray-400 hover:text-gray-700 transition-colors whitespace-nowrap"
-                  >
-                    Log out
-                  </button>
-                </form>
+              {/* Row 2: nav links — flex-wrap so future items spill to a new line */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pb-2 text-sm">
+                <a href="/" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Schedule</a>
+                <a href="/leaderboard" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Leaderboard</a>
+                <a href="/groups" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Groups</a>
+                <a href="/guide" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Guide</a>
+                {profile?.is_admin && (
+                  <a href="/admin" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Admin</a>
+                )}
               </div>
             </div>
           </nav>
