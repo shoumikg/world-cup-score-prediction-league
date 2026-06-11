@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { validateFeedback } from '@/lib/feedback'
 import { validateDisplayName, validateFavoriteTeam } from '@/lib/profile'
 import { predictionDeadlineUTC } from '@/lib/time'
+import { validateBonusAnswer } from '@/lib/bonus'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
@@ -153,6 +154,54 @@ export async function submitFeedback(rawMessage: string): Promise<{ error?: stri
     .insert({ username, message: result.message })
 
   if (error) return { error: 'Failed to send feedback. Please try again.' }
+  return {}
+}
+
+// ── Bonus questions ───────────────────────────────────────────
+
+export async function saveBonusAnswer(
+  questionId: number,
+  rawText: string | null,
+  rawTeam: string
+): Promise<{ error?: string }> {
+  const result = validateBonusAnswer(questionId, rawText, rawTeam)
+  if ('error' in result) return { error: result.error }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+
+  // Server-side deadline check (defense in depth — RLS is the authority)
+  const { data: firstGroupMatches } = await supabase
+    .from('matches')
+    .select('kickoff_utc')
+    .eq('stage', 'group')
+    .order('kickoff_utc')
+    .limit(1)
+
+  const firstKickoff = (firstGroupMatches as { kickoff_utc: string }[] | null)?.[0]?.kickoff_utc
+  if (!firstKickoff) return { error: 'No group matches found.' }
+  if (predictionDeadlineUTC(firstKickoff) <= new Date())
+    return { error: 'Bonus predictions are locked — the deadline has passed.' }
+
+  const { error } = await supabase.from('bonus_answers').upsert(
+    {
+      user_id: user.id,
+      question_id: questionId,
+      answer_text: result.answer.text,
+      answer_team: result.answer.team,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id,question_id' }
+  )
+
+  if (error) {
+    if (error.code === '42501')
+      return { error: 'Bonus predictions are locked — the deadline has passed.' }
+    return { error: 'Failed to save answer. Please try again.' }
+  }
+
+  revalidatePath('/bonus')
   return {}
 }
 
