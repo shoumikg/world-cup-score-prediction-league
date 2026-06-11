@@ -49,7 +49,12 @@ export default async function GroupsPage() {
                   <tr key={r.team} className="border-t">
                     <td className="pl-4 py-2">
                       <span className="text-xs text-gray-400 w-4 inline-block">{i + 1}</span>
-                      <span className="font-medium">{teamDisplay(r.team, r.team)}</span>
+                      <a
+                        href={`/?team=${encodeURIComponent(r.team)}`}
+                        className="font-medium hover:underline decoration-gray-300"
+                      >
+                        {teamDisplay(r.team, r.team)}
+                      </a>
                     </td>
                     <td className="text-center text-gray-600">{r.mp}</td>
                     <td className="text-center text-gray-600">{r.w}</td>
