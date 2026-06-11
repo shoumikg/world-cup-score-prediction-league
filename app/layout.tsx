@@ -66,8 +66,13 @@ export default async function RootLayout({
                 <a href="/groups" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Groups</a>
                 <a href="/guide" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Guide</a>
                 <a href="/bonus" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Bonus</a>
+                <a href="/bracket" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Bracket</a>
+                <a href="/compare" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Compare</a>
                 {profile?.is_admin && (
                   <a href="/admin" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Admin</a>
+                )}
+                {profile?.is_admin && (
+                  <a href="/admin/pending" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Pending</a>
                 )}
               </div>
             </div>

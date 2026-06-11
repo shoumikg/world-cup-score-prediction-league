@@ -1,0 +1,141 @@
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { istDateKey, formatKickoffIST, predictionDeadlineUTC } from '@/lib/time'
+import { teamDisplay, teamFlag } from '@/lib/flags'
+import type { Match, Prediction } from '@/lib/types'
+
+export const dynamic = 'force-dynamic'
+
+export default async function AdminPendingPage() {
+  const supabase = await createClient()
+
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile?.is_admin) redirect('/')
+
+  const todayKey = istDateKey(new Date().toISOString())
+
+  const [{ data: matches }, { data: preds }, { data: profiles }] = await Promise.all([
+    supabase.from('matches').select('*').order('kickoff_utc'),
+    supabase.from('predictions').select('user_id, match_id, home_pred, away_pred'),
+    supabase.from('profiles')
+      .select('id, display_name, favorite_team')
+      .eq('is_admin', false)
+      .order('display_name'),
+  ])
+
+  const todayMatches = ((matches ?? []) as Match[]).filter(
+    m => istDateKey(m.kickoff_utc) === todayKey
+  )
+
+  type PlayerRow = { id: string; display_name: string; favorite_team: string | null }
+  const players = (profiles ?? []) as PlayerRow[]
+
+  if (todayMatches.length === 0) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-6">
+        <h1 className="text-xl font-bold mb-1">Pending Predictions</h1>
+        <p className="text-sm text-gray-500">No matches scheduled for today (IST).</p>
+      </div>
+    )
+  }
+
+  const deadline = predictionDeadlineUTC(todayMatches[0].kickoff_utc)
+  const deadlinePassed = deadline <= new Date()
+
+  // predMap is populated by RLS: own rows always + others only after deadline
+  const predMap = new Map<string, { homePred: number; awayPred: number }>()
+  for (const p of (preds ?? []) as Prediction[]) {
+    predMap.set(`${p.match_id}:${p.user_id}`, { homePred: p.home_pred, awayPred: p.away_pred })
+  }
+
+  // How many non-admin players predicted every single match today
+  const fullyPredicted = deadlinePassed
+    ? players.filter(p => todayMatches.every(m => predMap.has(`${m.id}:${p.id}`))).length
+    : null
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
+      <div>
+        <h1 className="text-xl font-bold mb-1">Pending Predictions</h1>
+        <p className="text-sm text-gray-500">
+          {deadlinePassed
+            ? `Deadline closed · ${fullyPredicted} of ${players.length} players predicted all matches today`
+            : `Deadline ${formatKickoffIST(deadline.toISOString())} IST — predictions hidden until deadline passes`}
+        </p>
+      </div>
+
+      {!deadlinePassed && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+          Predictions are locked by RLS until the deadline closes. This grid will populate after{' '}
+          {formatKickoffIST(deadline.toISOString())} IST — refresh then to see who predicted what.
+          For pre-deadline reminders, run the SQL query in the Supabase editor.
+        </div>
+      )}
+
+      {todayMatches.map(m => {
+        const home = teamDisplay(m.home_team, m.home_source ?? 'TBD')
+        const away = teamDisplay(m.away_team, m.away_source ?? 'TBD')
+
+        const unpredicted = deadlinePassed
+          ? players.filter(p => !predMap.has(`${m.id}:${p.id}`))
+          : []
+
+        return (
+          <div key={m.id} className="bg-white rounded-xl border shadow-sm overflow-hidden">
+            <div className="px-4 py-3 bg-gray-50 border-b flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-gray-400">#{m.id}</span>
+              <span className="text-sm font-medium">{home} vs {away}</span>
+              {deadlinePassed && unpredicted.length > 0 && (
+                <span className="ml-auto text-xs font-medium text-red-500">
+                  {unpredicted.length} no pick
+                </span>
+              )}
+              {deadlinePassed && unpredicted.length === 0 && (
+                <span className="ml-auto text-xs font-medium text-green-600">All predicted ✓</span>
+              )}
+              {!deadlinePassed && (
+                <span className="ml-auto text-xs text-gray-400">
+                  {formatKickoffIST(m.kickoff_utc)} IST
+                </span>
+              )}
+            </div>
+            <div className="divide-y">
+              {players.map(player => {
+                const pred = predMap.get(`${m.id}:${player.id}`)
+                return (
+                  <div key={player.id} className="px-4 py-2.5 flex items-center gap-2">
+                    <span className="text-sm flex-1 min-w-0 truncate">
+                      {teamFlag(player.favorite_team) && (
+                        <span className="mr-1">{teamFlag(player.favorite_team)}</span>
+                      )}
+                      {player.display_name}
+                    </span>
+                    {deadlinePassed ? (
+                      pred ? (
+                        <span className="text-sm font-semibold text-gray-800 shrink-0">
+                          {pred.homePred}–{pred.awayPred}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-red-400 font-medium shrink-0">no pick</span>
+                      )
+                    ) : (
+                      <span className="text-xs text-gray-300 shrink-0">—</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}

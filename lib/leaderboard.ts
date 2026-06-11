@@ -1,6 +1,7 @@
 import { scoreOutcome, matchPoints } from './scoring'
 import { bonusPointsFor } from './bonus'
 import type { Match, Prediction, BonusGrade } from './types'
+import type { Outcome } from './scoring'
 
 export interface LeaderboardRow {
   userId: string
@@ -11,9 +12,10 @@ export interface LeaderboardRow {
   correct: number
   wrong: number
   scored: number
-  points: number      // match points only
-  bonusPoints: number // points from correctly-graded bonus answers
-  total: number       // points + bonusPoints
+  points: number         // match points only
+  bonusPoints: number    // points from correctly-graded bonus answers
+  total: number          // points + bonusPoints
+  recentForm: Outcome[]  // last 5 scored outcomes, oldest→newest
 }
 
 export interface LeaderboardProfile {
@@ -47,9 +49,12 @@ export function computeLeaderboard(
       displayName: p.display_name,
       favoriteTeam: p.favorite_team,
       exact: 0, correct_gd: 0, correct: 0, wrong: 0, scored: 0,
-      points: 0, bonusPoints: 0, total: 0,
+      points: 0, bonusPoints: 0, total: 0, recentForm: [],
     })
   }
+
+  // Scratch accumulator for recent form — not exported on the row interface
+  const formAccum = new Map<string, Array<{ kickoff: string; outcome: Outcome }>>()
 
   for (const pred of predictions) {
     const row = rows.get(pred.user_id)
@@ -60,6 +65,9 @@ export function computeLeaderboard(
     row[outcome] += 1
     row.scored += 1
     row.points += matchPoints(outcome, match.stage)
+    const fa = formAccum.get(pred.user_id) ?? []
+    fa.push({ kickoff: match.kickoff_utc, outcome })
+    formAccum.set(pred.user_id, fa)
   }
 
   for (const g of bonusGrades) {
@@ -70,6 +78,10 @@ export function computeLeaderboard(
 
   for (const row of rows.values()) {
     row.total = row.points + row.bonusPoints
+    row.recentForm = (formAccum.get(row.userId) ?? [])
+      .sort((a, b) => a.kickoff.localeCompare(b.kickoff))
+      .slice(-5)
+      .map(x => x.outcome)
   }
 
   return [...rows.values()].sort(

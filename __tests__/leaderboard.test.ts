@@ -9,11 +9,12 @@ function match(
   id: number,
   homeScore: number | null,
   awayScore: number | null,
-  stage: Stage = 'group'
+  stage: Stage = 'group',
+  kickoff = '2026-06-11T19:00:00Z'
 ): Match {
   return {
     id, stage, group_name: stage === 'group' ? 'A' : null,
-    kickoff_utc: '2026-06-11T19:00:00Z',
+    kickoff_utc: kickoff,
     home_team: 'Home', away_team: 'Away',
     home_source: null, away_source: null,
     venue: null, home_score: homeScore, away_score: awayScore,
@@ -326,6 +327,54 @@ describe('computeLeaderboard', () => {
     )
     expect(rows[0].displayName).toBe('Bob')
     expect(rows[0].total).toBe(28)
+  })
+
+  // ── recentForm ───────────────────────────────────────────────
+
+  it('recentForm is empty when player has no scored predictions', () => {
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice')],
+      [],
+      [match(1, 2, 1)]
+    )
+    expect(rows[0].recentForm).toEqual([])
+  })
+
+  it('recentForm contains outcomes in chronological order', () => {
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice')],
+      [
+        pred('u1', 1, 2, 1), // exact  — earlier
+        pred('u1', 2, 0, 1), // wrong  — later
+      ],
+      [
+        match(1, 2, 1, 'group', '2026-06-11T19:00:00Z'),
+        match(2, 1, 0, 'group', '2026-06-12T19:00:00Z'),
+      ]
+    )
+    expect(rows[0].recentForm).toEqual(['exact', 'wrong'])
+  })
+
+  it('recentForm is capped at 5 entries (most recent)', () => {
+    const matches = [1,2,3,4,5,6].map(i =>
+      match(i, 1, 0, 'group', `2026-06-${10+i}T19:00:00Z`)
+    )
+    const preds = [1,2,3,4,5,6].map(i => pred('u1', i, 1, 0)) // all exact
+    const rows = computeLeaderboard([profile('u1', 'Alice')], preds, matches)
+    expect(rows[0].recentForm).toHaveLength(5)
+  })
+
+  it('recentForm includes only the 5 most recent, not the oldest', () => {
+    // 6 matches: first is wrong, last 5 are exact
+    const matches = [1,2,3,4,5,6].map(i =>
+      match(i, 1, 0, 'group', `2026-06-${10+i}T19:00:00Z`)
+    )
+    const preds = [
+      pred('u1', 1, 0, 1), // wrong — oldest, should be excluded
+      ...([2,3,4,5,6].map(i => pred('u1', i, 1, 0))), // exact
+    ]
+    const rows = computeLeaderboard([profile('u1', 'Alice')], preds, matches)
+    expect(rows[0].recentForm).toEqual(['exact','exact','exact','exact','exact'])
   })
 
   it('breaks total tie by exact count', () => {

@@ -32,7 +32,7 @@ export function scoreOutcome(p: Prediction, m: Match): Outcome | null {
   return predGD === actualGD ? 'correct_gd' : 'correct'
 }
 
-const OUTCOME_CLASSES: Record<Outcome, string> = {
+export const OUTCOME_CLASSES: Record<Outcome, string> = {
   exact:      'bg-green-100 text-green-800',
   correct_gd: 'bg-orange-100 text-orange-700',
   correct:    'bg-yellow-100 text-yellow-800',

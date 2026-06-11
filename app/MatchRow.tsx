@@ -190,6 +190,26 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
         </div>
       </div>
 
+      {/* Popular pick split — visible after deadline */}
+      {locked && picks && picks.length > 0 && (() => {
+        const homeWins = picks.filter(p => p.prediction && p.prediction.homePred > p.prediction.awayPred).length
+        const draws    = picks.filter(p => p.prediction && p.prediction.homePred === p.prediction.awayPred).length
+        const awayWins = picks.filter(p => p.prediction && p.prediction.homePred < p.prediction.awayPred).length
+        return (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+              {homeName} <span className="font-semibold ml-1">{homeWins}</span>
+            </span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+              Draw <span className="font-semibold ml-1">{draws}</span>
+            </span>
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+              {awayName} <span className="font-semibold ml-1">{awayWins}</span>
+            </span>
+          </div>
+        )
+      })()}
+
       {/* Everyone's picks — visible after deadline */}
       {locked && picks && (
         <details className="mt-2 pt-2 border-t">
