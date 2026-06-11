@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { validateBonusAnswer, BONUS_TEXT_MAX, GROUP_BONUS_QUESTIONS } from '../lib/bonus'
+import {
+  validateBonusAnswer, validateBonusGrade,
+  bonusPointsFor, ALL_BONUS_QUESTIONS,
+  BONUS_TEXT_MAX, GROUP_BONUS_QUESTIONS,
+} from '../lib/bonus'
 import { TEAM_NAMES } from '../lib/flags'
 
 const validTeam = 'Brazil'
@@ -134,5 +138,62 @@ describe('GROUP_BONUS_QUESTIONS', () => {
     expect(GROUP_BONUS_QUESTIONS[0].type).toBe('player')
     expect(GROUP_BONUS_QUESTIONS[1].type).toBe('team')
     expect(GROUP_BONUS_QUESTIONS[2].type).toBe('team')
+  })
+})
+
+// ── bonusPointsFor ────────────────────────────────────────────
+describe('bonusPointsFor', () => {
+  it.each([1, 2, 3])('question %d returns 25', id => {
+    expect(bonusPointsFor(id)).toBe(25)
+  })
+
+  it.each([0, 4, 99, -1])('unknown id %d returns 0', id => {
+    expect(bonusPointsFor(id)).toBe(0)
+  })
+
+  it('returns 0 for non-integer ids', () => {
+    expect(bonusPointsFor(1.5)).toBe(0)
+    expect(bonusPointsFor(NaN)).toBe(0)
+  })
+
+  it('every ALL_BONUS_QUESTIONS entry has a positive integer points value', () => {
+    for (const q of ALL_BONUS_QUESTIONS) {
+      expect(Number.isInteger(q.points)).toBe(true)
+      expect(q.points).toBeGreaterThan(0)
+    }
+  })
+})
+
+// ── validateBonusGrade ────────────────────────────────────────
+const validUUID = '00000000-0000-0000-0000-000000000001'
+
+describe('validateBonusGrade', () => {
+  it('accepts valid inputs', () => {
+    expect(validateBonusGrade(1, true, validUUID))
+      .toEqual({ questionId: 1, isCorrect: true, targetUserId: validUUID })
+  })
+
+  it.each([0, 4, 99])('rejects out-of-range questionId %d', id => {
+    expect(validateBonusGrade(id, true, validUUID)).toHaveProperty('error')
+  })
+
+  it('rejects non-integer questionId', () => {
+    expect(validateBonusGrade(1.5, true, validUUID)).toHaveProperty('error')
+  })
+
+  it('rejects non-boolean isCorrect', () => {
+    expect(validateBonusGrade(1, 'yes', validUUID)).toHaveProperty('error')
+    expect(validateBonusGrade(1, 1, validUUID)).toHaveProperty('error')
+    expect(validateBonusGrade(1, null, validUUID)).toHaveProperty('error')
+  })
+
+  it('rejects malformed UUID', () => {
+    expect(validateBonusGrade(1, true, 'not-a-uuid')).toHaveProperty('error')
+    expect(validateBonusGrade(1, true, '')).toHaveProperty('error')
+  })
+
+  it('accepts false as a valid grade', () => {
+    expect(validateBonusGrade(1, false, validUUID))
+      .toEqual({ questionId: 1, isCorrect: false, targetUserId: validUUID })
   })
 })

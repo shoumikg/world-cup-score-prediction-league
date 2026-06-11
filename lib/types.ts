@@ -50,3 +50,10 @@ export interface BonusPickEntry {
   favoriteTeam: string | null
   answer: { text: string | null; team: string } | null
 }
+
+export interface BonusGrade {
+  user_id: string
+  question_id: number
+  is_correct: boolean
+  graded_at: string
+}

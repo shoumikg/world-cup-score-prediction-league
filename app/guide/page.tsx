@@ -186,15 +186,19 @@ export default function GuidePage() {
         </div>
 
         <p className="mt-3">
-          <strong>Bonus predictions</strong> (group stage and knockout stage questions on the Bonus
-          page) score <strong>25 pts</strong> each for group stage questions and <strong>30 pts</strong> each
-          for knockout stage questions if correct. Missed predictions score nothing and don't count against you.
+          <strong>Bonus predictions</strong> on the Bonus page score <strong>25 pts</strong> each
+          for group stage questions and <strong>30 pts</strong> each for knockout stage questions.
+          The admin manually grades each bonus answer after the deadline passes — you'll see the
+          result reflected in your Bonus column on the leaderboard. Missed predictions score nothing
+          and don't count against you.
         </p>
 
         <p className="mt-2">
-          The <strong>Leaderboard</strong> shows each player's tally by category — exact, GD,
-          result, wrong — sorted by exact scores first, then GD, then correct results.
-          Players appear by their <strong>display name</strong>, never their username.
+          The <strong>Leaderboard</strong> shows each player's tally broken down by category —
+          Exact, GD, Result, Wrong, and Bonus — plus a <strong>Pts</strong> column showing your
+          total. Rankings are by total points first; ties are broken by exact scores, then GD
+          predictions, then correct results. Players appear by their <strong>display name</strong>,
+          never their username.
         </p>
       </Section>
     </div>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { stageLabel, scoreColor } from '../lib/scoring'
-import type { Match, Prediction } from '../lib/types'
+import { stageLabel, scoreColor, matchPoints, MATCH_POINTS } from '../lib/scoring'
+import type { Match, Prediction, Stage } from '../lib/types'
 
 // ── Fixtures ─────────────────────────────────────────────────
 function match(home_score: number | null, away_score: number | null): Match {
@@ -16,6 +16,33 @@ function match(home_score: number | null, away_score: number | null): Match {
 function pred(home_pred: number, away_pred: number): Prediction {
   return { user_id: 'u', match_id: 1, home_pred, away_pred, updated_at: '' }
 }
+
+// ── matchPoints ───────────────────────────────────────────────
+describe('matchPoints', () => {
+  it.each([
+    ['exact',      10],
+    ['correct_gd',  5],
+    ['correct',     3],
+    ['wrong',       0],
+  ] as const)('group stage %s → %d pts', (outcome, pts) => {
+    expect(matchPoints(outcome, 'group')).toBe(pts)
+  })
+
+  const knockoutStages: Stage[] = ['r32', 'r16', 'qf', 'sf', 'third', 'final']
+  it.each(knockoutStages)('stage %s is treated as knockout', stage => {
+    expect(matchPoints('exact',      stage)).toBe(15)
+    expect(matchPoints('correct_gd', stage)).toBe(8)
+    expect(matchPoints('correct',    stage)).toBe(5)
+    expect(matchPoints('wrong',      stage)).toBe(0)
+  })
+
+  it('MATCH_POINTS record is exhaustive over all outcomes', () => {
+    for (const tier of ['group', 'knockout'] as const) {
+      expect(Object.keys(MATCH_POINTS[tier]).sort())
+        .toEqual(['correct', 'correct_gd', 'exact', 'wrong'])
+    }
+  })
+})
 
 // ── stageLabel ────────────────────────────────────────────────
 describe('stageLabel', () => {
