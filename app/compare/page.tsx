@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
 export default async function ComparePage(props: {
   searchParams: Promise<{ a?: string; b?: string }>
 }) {
-  const { a, b } = await props.searchParams
+  const { a: rawA, b } = await props.searchParams
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -25,6 +25,9 @@ export default async function ComparePage(props: {
   const allProfiles = (profilesRaw ?? []) as ProfileRow[]
   const allMatches  = (matchesRaw  ?? []) as Match[]
   const allPreds    = (predsRaw    ?? []) as Prediction[]
+
+  const currentUserProfile = allProfiles.find(p => p.id === user.id)
+  const a = rawA ?? currentUserProfile?.display_name
 
   // Player picker form shown when names aren't set
   if (!a || !b) {

@@ -29,6 +29,8 @@ export default async function LeaderboardPage() {
   )
 
   const anyScored = rows.some(r => r.scored > 0 || r.bonusPoints > 0)
+  const allProfiles = (profiles ?? []) as LeaderboardProfile[]
+  const currentUserName = allProfiles.find(p => p.id === user.id)?.display_name ?? ''
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
@@ -58,13 +60,20 @@ export default async function LeaderboardPage() {
               <tr key={r.userId} className="border-t first:border-0">
                 <td className="pl-3 py-2.5 text-gray-400 text-xs sticky left-0 bg-white z-10">{i + 1}</td>
                 <td className="py-2.5 font-medium sticky left-8 bg-white z-10 pr-2">
-                  <a
-                    href={`/compare?a=${encodeURIComponent(r.displayName)}`}
-                    className="hover:underline decoration-gray-300"
-                  >
-                    <span className="mr-1.5">{teamFlag(r.favoriteTeam) ?? '🇮🇳'}</span>
-                    {r.displayName}
-                  </a>
+                  {r.userId === user.id ? (
+                    <span>
+                      <span className="mr-1.5">{teamFlag(r.favoriteTeam) ?? '🇮🇳'}</span>
+                      {r.displayName}
+                    </span>
+                  ) : (
+                    <a
+                      href={`/compare?a=${encodeURIComponent(currentUserName)}&b=${encodeURIComponent(r.displayName)}`}
+                      className="hover:underline decoration-gray-300"
+                    >
+                      <span className="mr-1.5">{teamFlag(r.favoriteTeam) ?? '🇮🇳'}</span>
+                      {r.displayName}
+                    </a>
+                  )}
                   {r.recentForm.length > 0 && (
                     <span className="ml-2 inline-flex gap-0.5 align-middle">
                       {r.recentForm.map((outcome, j) => (
