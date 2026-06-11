@@ -51,17 +51,27 @@ describe('scoreColor', () => {
     })
   })
 
+  describe('correct goal difference (orange)', () => {
+    it('awards orange for correct home win with same GD, wrong exact scores', () => {
+      expect(scoreColor(pred(2, 1), match(3, 2))).toContain('orange')
+    })
+
+    it('awards orange for correct away win with same GD', () => {
+      expect(scoreColor(pred(0, 2), match(1, 3))).toContain('orange')
+    })
+
+    it('awards orange for correct draw prediction with different scoreline', () => {
+      expect(scoreColor(pred(1, 1), match(2, 2))).toContain('orange')
+    })
+  })
+
   describe('correct result direction only (yellow)', () => {
-    it('awards yellow for correct home win, wrong score', () => {
+    it('awards yellow for correct home win, wrong score and different GD', () => {
       expect(scoreColor(pred(1, 0), match(3, 1))).toContain('yellow')
     })
 
-    it('awards yellow for correct away win, wrong score', () => {
+    it('awards yellow for correct away win, wrong score and different GD', () => {
       expect(scoreColor(pred(0, 2), match(0, 1))).toContain('yellow')
-    })
-
-    it('awards yellow for correct draw, wrong exact scores', () => {
-      expect(scoreColor(pred(1, 1), match(2, 2))).toContain('yellow')
     })
   })
 
