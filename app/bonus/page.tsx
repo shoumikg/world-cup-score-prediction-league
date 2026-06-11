@@ -48,7 +48,10 @@ export default async function BonusPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-6">
-        <h1 className="text-xl font-bold">Bonus Questions</h1>
+        <div>
+          <h1 className="text-xl font-bold">Bonus Questions</h1>
+          <p className="text-xs text-gray-400 mt-0.5">Group stage · 25 pts each if correct</p>
+        </div>
         <span className={`text-xs font-normal ${deadlinePassed ? 'text-red-400' : 'text-gray-400'}`}>
           Deadline {formatKickoffIST(deadlineISO)} IST
           {deadlinePassed ? ' · closed' : <DeadlineCountdown deadlineISO={deadlineISO} />}
@@ -94,6 +97,11 @@ function BonusGuide() {
       </h2>
       <div className="space-y-3 text-sm text-gray-700 leading-relaxed">
         <p>
+          <strong>Scoring</strong> — Each correct answer earns <strong>25 pts</strong>.
+          The admin grades submissions manually once the group stage is over — there is
+          no automatic scoring.
+        </p>
+        <p>
           <strong>Player name</strong> — Type the player's full name as you know it.
           Capitalisation doesn't matter; the admin matches submissions manually when
           results come in.
@@ -119,6 +127,10 @@ function BonusGuide() {
           before the deadline. The{' '}
           <span className="text-green-600 font-medium">✓ Recorded</span> marker confirms
           your latest save was captured.
+        </p>
+        <p className="text-xs text-gray-500 bg-gray-50 border rounded px-3 py-2">
+          More bonus questions covering the knockout stages will appear here once the
+          group stage is complete. Those questions will be worth <strong>30 pts</strong> each.
         </p>
       </div>
     </section>
