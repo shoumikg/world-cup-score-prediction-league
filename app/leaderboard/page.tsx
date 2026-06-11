@@ -57,9 +57,7 @@ export default async function LeaderboardPage() {
               <tr key={r.userId} className="border-t first:border-0">
                 <td className="pl-3 py-2.5 text-gray-400 text-xs sticky left-0 bg-white z-10">{i + 1}</td>
                 <td className="py-2.5 font-medium sticky left-8 bg-white z-10 pr-2">
-                  {teamFlag(r.favoriteTeam) && (
-                    <span className="mr-1.5">{teamFlag(r.favoriteTeam)}</span>
-                  )}
+                  <span className="mr-1.5">{teamFlag(r.favoriteTeam) ?? '🇮🇳'}</span>
                   {r.displayName}
                 </td>
                 <td className="text-center py-2.5">
