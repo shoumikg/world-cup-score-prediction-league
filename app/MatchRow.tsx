@@ -136,14 +136,11 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
           {locked ? (
             <div className="flex items-center gap-1.5">
               {displayPred ? (
-                <>
-                  <span className="text-xs text-gray-400">you:</span>
-                  <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
-                    hasResult ? scoreColor(displayPred, match) : 'bg-gray-100 text-gray-700'
-                  }`}>
-                    {displayPred.home_pred}–{displayPred.away_pred}
-                  </span>
-                </>
+                <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
+                  hasResult ? scoreColor(displayPred, match) : 'bg-gray-100 text-gray-700'
+                }`}>
+                  {displayPred.home_pred}–{displayPred.away_pred}
+                </span>
               ) : (
                 <span className="text-xs text-gray-300 italic">no pick</span>
               )}
