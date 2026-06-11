@@ -2,11 +2,16 @@ import { createClient } from '@/lib/supabase/server'
 import { istDateKey, formatDateIST, formatKickoffIST, isKickedOff, isDeadlinePassed, predictionDeadlineUTC } from '@/lib/time'
 import { MatchRow } from '@/app/MatchRow'
 import { DeadlineCountdown } from '@/app/DeadlineCountdown'
+import { teamFlag } from '@/lib/flags'
 import type { Match, Prediction, PickEntry } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
-export default async function SchedulePage() {
+export default async function SchedulePage(props: {
+  searchParams: Promise<{ team?: string }>
+}) {
+  const { team: teamFilter } = await props.searchParams
+
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -32,23 +37,35 @@ export default async function SchedulePage() {
 
   const totalPlayers = profileList.length
 
+  const allMatches = (matches ?? []) as Match[]
+  const visibleMatches = teamFilter
+    ? allMatches.filter(m => m.home_team === teamFilter || m.away_team === teamFilter)
+    : allMatches
+
   // Group matches by IST calendar date
   const groups = new Map<string, Match[]>()
-  for (const m of (matches ?? []) as Match[]) {
+  for (const m of visibleMatches) {
     const key = istDateKey(m.kickoff_utc)
     if (!groups.has(key)) groups.set(key, [])
     groups.get(key)!.push(m)
   }
 
   // Find next upcoming match for the anchor
-  const nextMatch = (matches as Match[] | null)?.find(
-    m => !isKickedOff(m.kickoff_utc)
-  )
+  const nextMatch = visibleMatches.find(m => !isKickedOff(m.kickoff_utc))
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-6">
-        <h1 className="text-xl font-bold">Schedule & Predictions</h1>
+        <div>
+          <h1 className="text-xl font-bold">Schedule & Predictions</h1>
+          {teamFilter && (
+            <p className="text-sm text-gray-500 mt-0.5">
+              {teamFlag(teamFilter) && <span className="mr-1">{teamFlag(teamFilter)}</span>}
+              {teamFilter}
+              <a href="/" className="ml-2 text-xs text-gray-400 hover:text-gray-600">✕ clear</a>
+            </p>
+          )}
+        </div>
         {nextMatch && (
           <a
             href={`#match-${nextMatch.id}`}
