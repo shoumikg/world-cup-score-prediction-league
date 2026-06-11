@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { istDateKey, formatDateIST, formatKickoffIST, isKickedOff, isDeadlinePassed, predictionDeadlineUTC } from '@/lib/time'
 import { MatchRow } from '@/app/MatchRow'
+import { DeadlineCountdown } from '@/app/DeadlineCountdown'
 import type { Match, Prediction } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -66,7 +67,7 @@ export default async function SchedulePage() {
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 sticky top-12 bg-gray-50 py-1 z-10 flex items-baseline justify-between flex-wrap gap-x-3">
               <span>{formatDateIST(dayMatches[0].kickoff_utc)}</span>
               <span className={`text-xs font-normal normal-case tracking-normal ${deadlinePassed ? 'text-red-400' : 'text-gray-400'}`}>
-                Deadline {formatKickoffIST(deadline.toISOString())} IST{deadlinePassed ? ' · closed' : ''}
+                Deadline {formatKickoffIST(deadline.toISOString())} IST{deadlinePassed ? ' · closed' : <DeadlineCountdown deadlineISO={deadline.toISOString()} />}
               </span>
             </h2>
             <div className="bg-white rounded-xl border shadow-sm px-4">
