@@ -51,24 +51,24 @@ export default function GuidePage() {
       <Section title="Colour coding">
         <p className="mb-3">After the admin enters a result, your prediction chip changes colour:</p>
         <div className="space-y-2 text-sm">
-          <div className="flex items-center gap-3">
-            <span className="px-2 py-0.5 rounded bg-green-100 text-green-800 font-semibold text-xs w-24 text-center shrink-0">2 – 1</span>
-            <span><strong>Exact score</strong> — you predicted the precise scoreline.</span>
+          <div className="flex items-start gap-3">
+            <span className="px-2 py-0.5 rounded bg-green-100 text-green-800 font-semibold text-xs w-24 text-center shrink-0 mt-0.5">2 – 1</span>
+            <span><strong>Exact score</strong> — you predicted the precise scoreline. <span className="text-gray-500">(10 pts group · 15 pts knockout)</span></span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold text-xs w-24 text-center shrink-0">3 – 2</span>
-            <span><strong>Correct goal difference</strong> — you got the right result and the right goal difference, but not the exact scoreline. (e.g. predict 2–1, actual 3–2; or predict 1–1, actual 2–2.)</span>
+          <div className="flex items-start gap-3">
+            <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold text-xs w-24 text-center shrink-0 mt-0.5">3 – 2</span>
+            <span><strong>Correct goal difference</strong> — right result and right margin, wrong scoreline. (e.g. predict 2–1, actual 3–2; or predict 1–1, actual 2–2.) <span className="text-gray-500">(5 pts group · 8 pts knockout)</span></span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 font-semibold text-xs w-24 text-center shrink-0">1 – 0</span>
-            <span><strong>Correct result</strong> — you got the winner (or draw) right but with the wrong goal difference.</span>
+          <div className="flex items-start gap-3">
+            <span className="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 font-semibold text-xs w-24 text-center shrink-0 mt-0.5">1 – 0</span>
+            <span><strong>Correct result</strong> — right winner or draw, wrong goal difference. <span className="text-gray-500">(3 pts group · 5 pts knockout)</span></span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 font-semibold text-xs w-24 text-center shrink-0">0 – 2</span>
-            <span><strong>Wrong</strong> — the result went the other way.</span>
+          <div className="flex items-start gap-3">
+            <span className="px-2 py-0.5 rounded bg-red-100 text-red-700 font-semibold text-xs w-24 text-center shrink-0 mt-0.5">0 – 2</span>
+            <span><strong>Wrong</strong> — the result went the other way. <span className="text-gray-500">(0 pts)</span></span>
           </div>
-          <div className="flex items-center gap-3">
-            <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-semibold text-xs w-24 text-center shrink-0">2 – 1</span>
+          <div className="flex items-start gap-3">
+            <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-semibold text-xs w-24 text-center shrink-0 mt-0.5">2 – 1</span>
             <span><strong>No result yet</strong> — the match has kicked off but the score hasn't been entered yet.</span>
           </div>
         </div>
@@ -132,16 +132,69 @@ export default function GuidePage() {
       </Section>
 
       <Section title="Scoring and leaderboard">
-        <p>
-          The <strong>Leaderboard</strong> page shows every player's running tally in four
-          categories: exact scores (green), correct goal difference (orange), correct results
-          (yellow), and wrong picks (red). It's sorted by exact scores first, then correct
-          goal difference, then correct results. Missed predictions don't count against you —
-          they simply score nothing.
+        <p className="mb-3">
+          Every prediction scores points once the admin enters the result. Points depend on
+          how close your prediction was <em>and</em> which stage the match is in — knockout
+          matches are worth more.
         </p>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-gray-50 text-gray-500">
+                <th className="text-left font-medium px-3 py-2 border border-gray-200">Outcome</th>
+                <th className="text-left font-medium px-3 py-2 border border-gray-200">Condition</th>
+                <th className="text-center font-medium px-3 py-2 border border-gray-200">Group pts</th>
+                <th className="text-center font-medium px-3 py-2 border border-gray-200">Knockout pts</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="px-3 py-2 border border-gray-200">
+                  <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-semibold">Green</span>
+                </td>
+                <td className="px-3 py-2 border border-gray-200">Exact score</td>
+                <td className="px-3 py-2 border border-gray-200 text-center font-semibold">10</td>
+                <td className="px-3 py-2 border border-gray-200 text-center font-semibold">15</td>
+              </tr>
+              <tr className="bg-gray-50/50">
+                <td className="px-3 py-2 border border-gray-200">
+                  <span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold">Orange</span>
+                </td>
+                <td className="px-3 py-2 border border-gray-200">Correct GD, correct result direction, wrong score</td>
+                <td className="px-3 py-2 border border-gray-200 text-center font-semibold">5</td>
+                <td className="px-3 py-2 border border-gray-200 text-center font-semibold">8</td>
+              </tr>
+              <tr>
+                <td className="px-3 py-2 border border-gray-200">
+                  <span className="px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-800 font-semibold">Yellow</span>
+                </td>
+                <td className="px-3 py-2 border border-gray-200">Correct result direction, wrong GD</td>
+                <td className="px-3 py-2 border border-gray-200 text-center font-semibold">3</td>
+                <td className="px-3 py-2 border border-gray-200 text-center font-semibold">5</td>
+              </tr>
+              <tr className="bg-gray-50/50">
+                <td className="px-3 py-2 border border-gray-200">
+                  <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">Red</span>
+                </td>
+                <td className="px-3 py-2 border border-gray-200">Wrong result direction</td>
+                <td className="px-3 py-2 border border-gray-200 text-center font-semibold text-gray-400">0</td>
+                <td className="px-3 py-2 border border-gray-200 text-center font-semibold text-gray-400">0</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p className="mt-3">
+          <strong>Bonus predictions</strong> (group stage and knockout stage questions on the Bonus
+          page) score <strong>25 pts</strong> each for group stage questions and <strong>30 pts</strong> each
+          for knockout stage questions if correct. Missed predictions score nothing and don't count against you.
+        </p>
+
         <p className="mt-2">
-          Players appear by their <strong>display name</strong> (set on your profile page),
-          never their username. A points system may come later.
+          The <strong>Leaderboard</strong> shows each player's tally by category — exact, GD,
+          result, wrong — sorted by exact scores first, then GD, then correct results.
+          Players appear by their <strong>display name</strong>, never their username.
         </p>
       </Section>
     </div>
