@@ -392,6 +392,22 @@ describe('computeLeaderboard', () => {
     expect(rows[0].exact).toBe(1)
   })
 
+  it('breaks total tie by bonus points before exact count', () => {
+    // Alice: bonus 25, no match pts → total 25, 0 exact.
+    // Bob: group exact (10) + final exact (15) → total 25, 2 exact, bonus 0.
+    // Bonus outranks exact in the tie-break chain, so Alice wins.
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice'), profile('u2', 'Bob')],
+      [pred('u2', 1, 2, 1), pred('u2', 2, 2, 1)],
+      [match(1, 2, 1, 'group'), match(2, 2, 1, 'final')],
+      [grade('u1', 1, true)]
+    )
+    expect(rows[0].displayName).toBe('Alice')
+    expect(rows[0].total).toBe(rows[1].total) // both 25
+    expect(rows[0].rank).toBe(1)
+    expect(rows[1].rank).toBe(2)              // bonus differs → separate ranks
+  })
+
   // ── rank computation ──────────────────────────────────────────
 
   it('single player always gets rank 1', () => {
