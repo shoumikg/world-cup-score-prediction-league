@@ -12,6 +12,7 @@ export interface Match {
   venue: string | null
   home_score: number | null
   away_score: number | null
+  status: 'live' | 'ft' | 'aet' | 'pen' | null
 }
 
 export interface Prediction {

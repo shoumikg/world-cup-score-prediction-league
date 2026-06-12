@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { fetchLiveFixtures, normalizeTeamName } from '@/lib/api-football'
+import { fetchLiveFixtures, normalizeTeamName, mapApiStatus } from '@/lib/api-football'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -104,7 +104,12 @@ export async function GET(req: NextRequest) {
   }
 
   // ── 8. Match each API fixture to our DB ────────────────────────────────────
-  const updates: { id: number; home_score: number; away_score: number }[] = []
+  const updates: {
+    id: number
+    home_score: number
+    away_score: number
+    status: 'live' | 'ft' | 'aet' | 'pen' | null
+  }[] = []
   const unmatched: string[] = []
 
   for (const f of fixtures) {
@@ -120,7 +125,12 @@ export async function GET(req: NextRequest) {
     const matchId = index.get(`${home}|${away}|${date}`)
 
     if (matchId !== undefined) {
-      updates.push({ id: matchId, home_score: f.goals.home, away_score: f.goals.away })
+      updates.push({
+        id: matchId,
+        home_score: f.goals.home,
+        away_score: f.goals.away,
+        status: mapApiStatus(f.fixture.status.short),
+      })
     } else {
       // Log for diagnosis — unmatched usually means the normalization map needs
       // an entry. Visible in Vercel function logs and the response body.
@@ -128,12 +138,12 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── 9. Write score updates ─────────────────────────────────────────────────
+  // ── 9. Write score + status updates ───────────────────────────────────────
   const errors: string[] = []
   for (const u of updates) {
     const { error } = await db
       .from('matches')
-      .update({ home_score: u.home_score, away_score: u.away_score })
+      .update({ home_score: u.home_score, away_score: u.away_score, status: u.status })
       .eq('id', u.id)
     if (error) errors.push(`match ${u.id}: ${error.message}`)
   }

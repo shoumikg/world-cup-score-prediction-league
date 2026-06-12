@@ -46,6 +46,19 @@ export interface ApiFixture {
   }
 }
 
+// Maps API-Football status codes to our match status values.
+// Codes not listed here (NS, CANC, PST, ABD, etc.) return null.
+export function mapApiStatus(short: string): 'live' | 'ft' | 'aet' | 'pen' | null {
+  switch (short) {
+    case '1H': case '2H': case 'HT':
+    case 'ET': case 'BT': case 'P':  return 'live'
+    case 'FT':                        return 'ft'
+    case 'AET':                       return 'aet'
+    case 'PEN':                       return 'pen'
+    default:                          return null
+  }
+}
+
 // Returns all currently live fixtures in a single API call (1 request regardless
 // of how many matches are live simultaneously).
 export async function fetchLiveFixtures(): Promise<ApiFixture[]> {
