@@ -13,6 +13,7 @@ export interface Match {
   home_score: number | null
   away_score: number | null
   status: 'live' | 'ft' | 'aet' | 'pen' | null
+  live_minute: number | null
 }
 
 export interface Prediction {

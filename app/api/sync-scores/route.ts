@@ -92,6 +92,7 @@ export async function GET(req: NextRequest) {
     home_score: number
     away_score: number
     status: 'live' | 'ft' | 'aet' | 'pen' | null
+    live_minute: number | null
   }[] = []
   const unmatched: string[] = []
 
@@ -104,11 +105,14 @@ export async function GET(req: NextRequest) {
     const matchId = index.get(`${home}|${away}|${date}`)
 
     if (matchId !== undefined) {
+      const status = mapStatus(f.status, f.score.duration)
       updates.push({
         id: matchId,
         home_score: f.score.fullTime.home!,
         away_score: f.score.fullTime.away!,
-        status: mapStatus(f.status, f.score.duration),
+        status,
+        // Minute is only meaningful in play; cleared at FT or when the feed omits it
+        live_minute: status === 'live' && typeof f.minute === 'number' ? f.minute : null,
       })
     } else {
       // Appears in Vercel function logs and response body for diagnosis.
@@ -122,7 +126,7 @@ export async function GET(req: NextRequest) {
   for (const u of updates) {
     const { error } = await db
       .from('matches')
-      .update({ home_score: u.home_score, away_score: u.away_score, status: u.status })
+      .update({ home_score: u.home_score, away_score: u.away_score, status: u.status, live_minute: u.live_minute })
       .eq('id', u.id)
     if (error) errors.push(`match ${u.id}: ${error.message}`)
   }

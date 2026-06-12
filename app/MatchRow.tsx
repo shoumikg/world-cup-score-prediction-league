@@ -113,7 +113,9 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
   const scoreChip = !hasResult ? null : match.status === 'live' ? (
     <span className="inline-flex items-center gap-1.5 bg-green-600 text-white rounded px-2 py-0.5 shrink-0">
       <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />
-      <span className="text-[10px] font-semibold">LIVE</span>
+      <span className="text-[10px] font-semibold">
+        {match.live_minute != null ? `${match.live_minute}'` : 'LIVE'}
+      </span>
       <span className="text-sm font-bold">{match.home_score}–{match.away_score}</span>
     </span>
   ) : (
