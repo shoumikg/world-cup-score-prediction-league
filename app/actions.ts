@@ -226,7 +226,7 @@ export async function saveResult(
 
   const { error } = await supabase
     .from('matches')
-    .update({ home_score: homeScore, away_score: awayScore, status: 'ft' })
+    .update({ home_score: homeScore, away_score: awayScore, status: 'ft', live_minute: null })
     .eq('id', matchId)
 
   if (error) return { error: error.message }

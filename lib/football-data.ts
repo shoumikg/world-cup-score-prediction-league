@@ -50,6 +50,7 @@ export interface FDMatch {
   id: number
   utcDate: string            // ISO 8601 kickoff UTC
   status: string             // SCHEDULED TIMED IN_PLAY PAUSED EXTRA_TIME PENALTY_SHOOTOUT FINISHED
+  minute?: number | null     // current match minute while in play; may be absent or null
   homeTeam: { name: string }
   awayTeam: { name: string }
   score: {
