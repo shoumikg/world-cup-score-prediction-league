@@ -15,6 +15,7 @@ export interface LeaderboardRow {
   points: number         // match points only
   bonusPoints: number    // points from correctly-graded bonus answers
   total: number          // points + bonusPoints
+  rank: number           // competition rank (1-indexed; same rank when all 5 tiebreakers are equal)
   recentForm: Outcome[]  // last 5 scored outcomes, oldest→newest
 }
 
@@ -49,7 +50,7 @@ export function computeLeaderboard(
       displayName: p.display_name,
       favoriteTeam: p.favorite_team,
       exact: 0, correct_gd: 0, correct: 0, wrong: 0, scored: 0,
-      points: 0, bonusPoints: 0, total: 0, recentForm: [],
+      points: 0, bonusPoints: 0, total: 0, rank: 0, recentForm: [],
     })
   }
 
@@ -84,7 +85,7 @@ export function computeLeaderboard(
       .map(x => x.outcome)
   }
 
-  return [...rows.values()].sort(
+  const sorted = [...rows.values()].sort(
     (a, b) =>
       b.total       - a.total       ||
       b.exact       - a.exact       ||
@@ -93,4 +94,24 @@ export function computeLeaderboard(
       a.wrong       - b.wrong       ||
       a.displayName.localeCompare(b.displayName)
   )
+
+  // Competition ranking: same rank when all five tiebreakers are equal.
+  // Alphabetical is the final display-order tie-break, not a rank differentiator.
+  let rank = 1
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0) {
+      const prev = sorted[i - 1]
+      const cur  = sorted[i]
+      const different =
+        cur.total      !== prev.total      ||
+        cur.exact      !== prev.exact      ||
+        cur.correct_gd !== prev.correct_gd ||
+        cur.correct    !== prev.correct    ||
+        cur.wrong      !== prev.wrong
+      if (different) rank = i + 1
+    }
+    sorted[i].rank = rank
+  }
+
+  return sorted
 }
