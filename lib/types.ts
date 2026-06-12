@@ -35,6 +35,7 @@ export interface Profile {
 export interface PickEntry {
   displayName: string
   favoriteTeam: string | null
+  isSelf: boolean
   prediction: { homePred: number; awayPred: number } | null
 }
 

@@ -114,6 +114,7 @@ export default async function SchedulePage(props: {
                       .map(profile => ({
                         displayName: profile.display_name,
                         favoriteTeam: profile.favorite_team,
+                        isSelf: profile.id === user.id,
                         prediction: predByMatchUser.get(`${m.id}:${profile.id}`) ?? null,
                       }))
                       .sort((a, b) => a.displayName.localeCompare(b.displayName))

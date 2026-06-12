@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { savePrediction } from '@/app/actions'
-import { stageLabel, scoreColor } from '@/lib/scoring'
+import { stageLabel, scoreColor, scoreOutcome, type Outcome } from '@/lib/scoring'
 import { teamDisplay } from '@/lib/flags'
 import { kickoffTimerDelay, predictionDeadlineUTC } from '@/lib/time'
 import { teamFlag } from '@/lib/flags'
@@ -93,6 +93,20 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
       : undefined)
 
   const predictedCount = picks?.filter(p => p.prediction !== null).length ?? 0
+
+  // Once a result is in, order everyone's picks best-first (mini leaderboard
+  // for the match); before that, keep the server's alphabetical order.
+  const OUTCOME_RANK: Record<Outcome, number> = { exact: 0, correct_gd: 1, correct: 2, wrong: 3 }
+  const entryRank = (e: PickEntry) =>
+    e.prediction
+      ? OUTCOME_RANK[scoreOutcome(
+          { user_id: '', match_id: match.id, home_pred: e.prediction.homePred, away_pred: e.prediction.awayPred, updated_at: '' },
+          match
+        )!]
+      : 4 // no pick sorts last
+  const displayedPicks = picks && hasResult
+    ? [...picks].sort((a, b) => entryRank(a) - entryRank(b) || a.displayName.localeCompare(b.displayName))
+    : picks
 
   // Score chip — appearance depends on match status. Rendered in two spots:
   // beside the stage badge on mobile, between venue and prediction on sm+.
@@ -223,9 +237,13 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
             Everyone's picks ({predictedCount}{totalPlayers ? ` of ${totalPlayers}` : ''})
           </summary>
           <div className="mt-2 pb-1">
-            {picks.map((entry, i) => (
-              <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded odd:bg-gray-50">
-                <span className="text-xs text-gray-600 min-w-0 flex-1 truncate">
+            {displayedPicks!.map((entry, i) => (
+              <div key={i} className={`flex items-center gap-2 px-2 py-1.5 rounded ${
+                entry.isSelf ? 'bg-green-50' : 'odd:bg-gray-50'
+              }`}>
+                <span className={`text-xs min-w-0 flex-1 truncate ${
+                  entry.isSelf ? 'text-green-900 font-semibold' : 'text-gray-600'
+                }`}>
                   {teamFlag(entry.favoriteTeam) && (
                     <span className="mr-1">{teamFlag(entry.favoriteTeam)}</span>
                   )}
