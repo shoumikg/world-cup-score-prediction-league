@@ -15,7 +15,7 @@ export interface LeaderboardRow {
   points: number         // match points only
   bonusPoints: number    // points from correctly-graded bonus answers
   total: number          // points + bonusPoints
-  rank: number           // competition rank (1-indexed; same rank when all 6 tiebreakers are equal)
+  rank: number           // competition rank (1-indexed; same rank when total+exact+GD+correct+wrong are equal)
   recentForm: Outcome[]  // last 5 scored outcomes, oldest→newest
 }
 
@@ -29,9 +29,10 @@ export interface LeaderboardProfile {
  * Tallies every player's prediction outcomes and bonus grades.
  * Players with no predictions/grades still appear (all zeros). Missed
  * predictions count as nothing — not as wrong. Ungraded bonus answers = 0.
- * Rank: total pts desc, then bonusPoints desc, exact desc, correct_gd desc,
- * correct desc, wrong asc. Players equal on ALL of these share a rank;
- * display name orders fully-tied rows on screen but never affects rank.
+ * Rank: total pts desc, then exact desc, correct_gd desc, correct desc,
+ * wrong asc. Bonus pts count only toward total — they are NOT a separate
+ * tiebreaker. Display name orders fully-tied rows on screen but never
+ * affects rank.
  */
 export function computeLeaderboard(
   profiles: LeaderboardProfile[],
@@ -86,14 +87,14 @@ export function computeLeaderboard(
       .map(x => x.outcome)
   }
 
-  // Tie-break chain after total: bonus carries the highest weight, then the
-  // outcome categories best-first. The trailing localeCompare only makes the
-  // on-screen order of fully-tied players deterministic — it is deliberately
-  // excluded from the rank comparison below and can never split a rank.
+  // Tie-break chain after total: outcome categories best-first. Bonus pts
+  // are already baked into total and intentionally absent here — they don't
+  // split ranks beyond what total already captures. The trailing localeCompare
+  // only makes the on-screen order of fully-tied players deterministic — it is
+  // deliberately excluded from the rank comparison below and can never split a rank.
   const sorted = [...rows.values()].sort(
     (a, b) =>
       b.total       - a.total       ||
-      b.bonusPoints - a.bonusPoints ||
       b.exact       - a.exact       ||
       b.correct_gd  - a.correct_gd  ||
       b.correct     - a.correct     ||
@@ -101,19 +102,20 @@ export function computeLeaderboard(
       a.displayName.localeCompare(b.displayName)
   )
 
-  // Competition ranking: same rank when all six tiebreakers are equal.
+  // Competition ranking: same rank when all five tiebreakers (total, exact,
+  // correct_gd, correct, wrong) are equal. Bonus is baked into total and
+  // does not create an additional split.
   let rank = 1
   for (let i = 0; i < sorted.length; i++) {
     if (i > 0) {
       const prev = sorted[i - 1]
       const cur  = sorted[i]
       const different =
-        cur.total       !== prev.total       ||
-        cur.bonusPoints !== prev.bonusPoints ||
-        cur.exact       !== prev.exact       ||
-        cur.correct_gd  !== prev.correct_gd  ||
-        cur.correct     !== prev.correct     ||
-        cur.wrong       !== prev.wrong
+        cur.total      !== prev.total      ||
+        cur.exact      !== prev.exact      ||
+        cur.correct_gd !== prev.correct_gd ||
+        cur.correct    !== prev.correct    ||
+        cur.wrong      !== prev.wrong
       if (different) rank = i + 1
     }
     sorted[i].rank = rank
