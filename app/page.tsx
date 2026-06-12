@@ -119,7 +119,10 @@ export default async function SchedulePage(props: {
                       .sort((a, b) => a.displayName.localeCompare(b.displayName))
                   : undefined
                 return (
-                  <div key={m.id} id={`match-${m.id}`} className="scroll-mt-32">
+                  <div key={m.id} id={`match-${m.id}`} className="scroll-mt-28">
+                    <div className="text-xs text-gray-400 pt-3 pb-1">
+                      {formatKickoffIST(m.kickoff_utc)} IST
+                    </div>
                     <MatchRow
                       match={m}
                       prediction={predMap.get(m.id)}

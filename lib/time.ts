@@ -12,16 +12,6 @@ export function formatKickoffIST(utc: string): string {
   }).format(new Date(utc))
 }
 
-// Time only (e.g. "12:30 am") — for contexts where the date is already shown
-export function formatTimeIST(utc: string): string {
-  return new Intl.DateTimeFormat('en-IN', {
-    timeZone: IST,
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  }).format(new Date(utc))
-}
-
 export function formatDateIST(utc: string): string {
   return new Intl.DateTimeFormat('en-IN', {
     timeZone: IST,

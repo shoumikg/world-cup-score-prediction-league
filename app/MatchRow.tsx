@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from 'react'
 import { savePrediction } from '@/app/actions'
 import { stageLabel, scoreColor } from '@/lib/scoring'
 import { teamDisplay } from '@/lib/flags'
-import { kickoffTimerDelay, predictionDeadlineUTC, formatTimeIST } from '@/lib/time'
+import { kickoffTimerDelay, predictionDeadlineUTC } from '@/lib/time'
 import { teamFlag } from '@/lib/flags'
 import type { Match, Prediction, PickEntry } from '@/lib/types'
 
@@ -125,7 +125,6 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
             }`}>
               {match.stage === 'group' ? `Grp ${match.group_name}` : stageLabel(match.stage)}
             </span>
-            <span className="text-xs text-gray-400 shrink-0">{formatTimeIST(match.kickoff_utc)} IST</span>
             {/* Mobile: score chip rides the meta line, pushed right */}
             <span className="ml-auto sm:hidden">{scoreChip}</span>
           </div>

@@ -59,10 +59,8 @@ export default async function RootLayout({
                   </form>
                 </div>
               </div>
-              {/* Row 2: nav links — single line, scrolls horizontally on narrow
-                  screens. Keeps the nav a constant height so sticky offsets
-                  (top-20 on day headers) hold on every viewport. */}
-              <div className="flex items-center gap-x-4 pb-2 text-sm overflow-x-auto">
+              {/* Row 2: nav links — flex-wrap so future items spill to a new line */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pb-2 text-sm">
                 <a href="/" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Schedule</a>
                 <a href="/leaderboard" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Leaderboard</a>
                 <a href="/groups" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Groups</a>
