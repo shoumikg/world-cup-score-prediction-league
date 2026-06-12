@@ -15,23 +15,27 @@ function inLiveWindow(kickoffUtc: string): boolean {
   return now >= t - BEFORE_MS && now <= t + AFTER_MS
 }
 
-// Keeps total API calls within ~85/day regardless of how many matches are today.
-// Formula: interval = ceil((matchesToday × 115 min) / 85 budget), minimum 2 min.
+// interval = ceil(matches_today × 115 min / 85 daily budget), minimum 2 min.
+// Falls back to 2 min for the edge case where a match from yesterday UTC is still
+// in its live window but no matches are scheduled on today's UTC date.
 function intervalMinutes(matchCountToday: number): number {
-  if (matchCountToday === 0) return Infinity
+  if (matchCountToday === 0) return 2
   return Math.max(2, Math.ceil((matchCountToday * 115) / 85))
 }
 
 export async function GET(req: NextRequest) {
-  // ── 1. Authenticate ────────────────────────────────────────────────────────
-  // Vercel injects `Authorization: Bearer <CRON_SECRET>` automatically.
-  // External cron services (e.g. cron-job.org) must send the same header.
-  if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
+  // ── 1. Auth ────────────────────────────────────────────────────────────────
+  // Explicitly check the env var is set — avoids the "Bearer undefined" bypass
+  // where an unset secret makes the header trivially guessable.
+  const secret = process.env.CRON_SECRET
+  if (!secret || req.headers.get('authorization') !== `Bearer ${secret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // ── 2. Load our match list (own DB — free, no API quota) ───────────────────
-  const { data: matchesRaw, error: matchErr } = await getAdminClient()
+  const db = getAdminClient()
+
+  // ── 2. Load match list (own DB — no API quota used) ────────────────────────
+  const { data: matchesRaw, error: matchErr } = await db
     .from('matches')
     .select('id, kickoff_utc, home_team, away_team')
 
@@ -44,35 +48,44 @@ export async function GET(req: NextRequest) {
     away_team: string | null
   }[]
 
-  // ── 3. Skip if no matches are in their live window ─────────────────────────
-  const liveNow = matches.filter(m => inLiveWindow(m.kickoff_utc))
-  if (liveNow.length === 0) {
+  // ── 3. Skip if nothing is live right now ───────────────────────────────────
+  const anyLive = matches.some(m => inLiveWindow(m.kickoff_utc))
+  if (!anyLive) {
     return NextResponse.json({ skipped: true, reason: 'no live window' })
   }
 
-  // ── 4. Adaptive rate-limiting ──────────────────────────────────────────────
-  // Count matches on today's UTC date to calculate polling interval.
+  // ── 4. Compute adaptive interval ───────────────────────────────────────────
   const todayUTC = new Date().toISOString().slice(0, 10)
   const todayCount = matches.filter(m => m.kickoff_utc.slice(0, 10) === todayUTC).length
   const interval = intervalMinutes(todayCount)
+  // interval is always >= 2, so Date.now() - interval * 60_000 is always valid
+  const cutoff = new Date(Date.now() - interval * 60_000).toISOString()
 
-  const { data: state } = await getAdminClient()
+  // ── 5. Atomic claim via conditional UPDATE ─────────────────────────────────
+  // Updates last_synced_at only if enough time has elapsed. If two cron instances
+  // fire simultaneously, only one satisfies the lte condition — the other sees 0
+  // rows returned and skips. Side-effect: if the API later fails, the timestamp
+  // is still advanced, which intentionally prevents quota-burning retry storms.
+  const { data: claimed } = await db
     .from('sync_state')
-    .select('last_synced_at')
-    .single()
+    .update({ last_synced_at: new Date().toISOString() })
+    .eq('id', true)
+    .lte('last_synced_at', cutoff)
+    .select('id')
 
-  const lastSync = state?.last_synced_at ? new Date(state.last_synced_at) : new Date(0)
-  const minsSince = (Date.now() - lastSync.getTime()) / 60_000
-
-  if (minsSince < interval) {
+  if (!claimed || claimed.length === 0) {
+    const { data: state } = await db.from('sync_state').select('last_synced_at').single()
+    const elapsed = state?.last_synced_at
+      ? (Date.now() - new Date(state.last_synced_at).getTime()) / 60_000
+      : 0
     return NextResponse.json({
       skipped: true,
       reason: 'too soon',
-      nextInMinutes: Math.ceil(interval - minsSince),
+      nextInMinutes: Math.max(0, Math.ceil(interval - elapsed)),
     })
   }
 
-  // ── 5. Fetch live fixtures from API-Football ───────────────────────────────
+  // ── 6. Fetch live fixtures from API-Football ───────────────────────────────
   let fixtures
   try {
     fixtures = await fetchLiveFixtures()
@@ -80,50 +93,49 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: String(err) }, { status: 502 })
   }
 
-  // ── 6. Build lookup index: "HomeTeam|AwayTeam|YYYY-MM-DD" → match id ───────
-  // Only index matches that have both teams filled in (knockout placeholders don't).
-  // The date uses UTC — same slice API-Football gives us — so they align exactly.
+  // ── 7. Build lookup index: "HomeTeam|AwayTeam|YYYY-MM-DD" → match id ───────
+  // Only matches with both teams populated are indexed — knockout placeholders
+  // ("Winner M37") are skipped and will match once admin fills in the teams.
   const index = new Map<string, number>()
   for (const m of matches) {
     if (!m.home_team || !m.away_team) continue
     index.set(`${m.home_team}|${m.away_team}|${m.kickoff_utc.slice(0, 10)}`, m.id)
   }
 
-  // ── 7. Match each live fixture to our DB and collect updates ───────────────
+  // ── 8. Match each API fixture to our DB ────────────────────────────────────
   const updates: { id: number; home_score: number; away_score: number }[] = []
   const unmatched: string[] = []
 
   for (const f of fixtures) {
-    // Skip fixtures that haven't produced goals data yet (pre-kickoff "NS")
+    // Skip fixtures with no goal data yet (pre-kickoff status "NS")
     if (f.goals.home === null || f.goals.away === null) continue
 
-    const home = normalizeTeamName(f.teams.home.name)
-    const away = normalizeTeamName(f.teams.away.name)
-    const date = f.fixture.date.slice(0, 10)
+    // Guard against malformed API responses with missing team fields
+    const home = normalizeTeamName((f.teams.home?.name ?? '').trim())
+    const away = normalizeTeamName((f.teams.away?.name ?? '').trim())
+    if (!home || !away) continue
 
+    const date = f.fixture.date.slice(0, 10)
     const matchId = index.get(`${home}|${away}|${date}`)
+
     if (matchId !== undefined) {
       updates.push({ id: matchId, home_score: f.goals.home, away_score: f.goals.away })
     } else {
+      // Log for diagnosis — unmatched usually means the normalization map needs
+      // an entry. Visible in Vercel function logs and the response body.
       unmatched.push(`${home} vs ${away} (${date})`)
     }
   }
 
-  // ── 8. Write score updates ─────────────────────────────────────────────────
+  // ── 9. Write score updates ─────────────────────────────────────────────────
   const errors: string[] = []
   for (const u of updates) {
-    const { error } = await getAdminClient()
+    const { error } = await db
       .from('matches')
       .update({ home_score: u.home_score, away_score: u.away_score })
       .eq('id', u.id)
     if (error) errors.push(`match ${u.id}: ${error.message}`)
   }
-
-  // ── 9. Record sync timestamp (even on partial error) ──────────────────────
-  await getAdminClient()
-    .from('sync_state')
-    .update({ last_synced_at: new Date().toISOString() })
-    .eq('id', true)
 
   return NextResponse.json({
     updated: updates.length,
