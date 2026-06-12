@@ -57,7 +57,7 @@ export default async function SchedulePage(props: {
   const nextMatch = visibleMatches.find(m => !isKickedOff(m.kickoff_utc))
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
+    <div className="max-w-4xl mx-auto px-3 sm:px-4 py-6">
       <LiveRefresh hasLive={hasLive} />
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-6">
         <div>
@@ -107,7 +107,7 @@ export default async function SchedulePage(props: {
                 Deadline {formatKickoffIST(deadline.toISOString())} IST{deadlinePassed ? ' · closed' : <DeadlineCountdown deadlineISO={deadline.toISOString()} />}
               </span>
             </h2>
-            <div className="bg-white rounded-xl border shadow-sm px-4">
+            <div className="bg-white rounded-xl border shadow-sm px-3 sm:px-4">
               {dayMatches.map(m => {
                 const picks: PickEntry[] | undefined = isDeadlinePassed(m.kickoff_utc)
                   ? profileList
@@ -119,10 +119,7 @@ export default async function SchedulePage(props: {
                       .sort((a, b) => a.displayName.localeCompare(b.displayName))
                   : undefined
                 return (
-                  <div key={m.id} id={`match-${m.id}`} className="scroll-mt-28">
-                    <div className="text-xs text-gray-400 pt-3 pb-1">
-                      {formatKickoffIST(m.kickoff_utc)} IST
-                    </div>
+                  <div key={m.id} id={`match-${m.id}`} className="scroll-mt-32">
                     <MatchRow
                       match={m}
                       prediction={predMap.get(m.id)}

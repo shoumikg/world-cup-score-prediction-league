@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from 'react'
 import { savePrediction } from '@/app/actions'
 import { stageLabel, scoreColor } from '@/lib/scoring'
 import { teamDisplay } from '@/lib/flags'
-import { kickoffTimerDelay, predictionDeadlineUTC } from '@/lib/time'
+import { kickoffTimerDelay, predictionDeadlineUTC, formatTimeIST } from '@/lib/time'
 import { teamFlag } from '@/lib/flags'
 import type { Match, Prediction, PickEntry } from '@/lib/types'
 
@@ -125,6 +125,7 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
             }`}>
               {match.stage === 'group' ? `Grp ${match.group_name}` : stageLabel(match.stage)}
             </span>
+            <span className="text-xs text-gray-400 shrink-0">{formatTimeIST(match.kickoff_utc)} IST</span>
             {/* Mobile: score chip rides the meta line, pushed right */}
             <span className="ml-auto sm:hidden">{scoreChip}</span>
           </div>
@@ -157,21 +158,21 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <div className="flex items-center">
                 <button type="button" onClick={() => setHomeVal(Math.max(0, homeVal - 1))} disabled={isPending}
-                  className="w-8 h-8 rounded-l border border-r-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none">−</button>
+                  className="w-8 h-8 rounded-l border border-r-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none touch-manipulation">−</button>
                 <span className="w-8 h-8 border-y border-gray-300 flex items-center justify-center text-sm font-semibold select-none">{homeVal}</span>
                 <button type="button" onClick={() => setHomeVal(Math.min(99, homeVal + 1))} disabled={isPending}
-                  className="w-8 h-8 rounded-r border border-l-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none">+</button>
+                  className="w-8 h-8 rounded-r border border-l-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none touch-manipulation">+</button>
               </div>
               <span className="text-gray-400 text-xs">–</span>
               <div className="flex items-center">
                 <button type="button" onClick={() => setAwayVal(Math.max(0, awayVal - 1))} disabled={isPending}
-                  className="w-8 h-8 rounded-l border border-r-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none">−</button>
+                  className="w-8 h-8 rounded-l border border-r-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none touch-manipulation">−</button>
                 <span className="w-8 h-8 border-y border-gray-300 flex items-center justify-center text-sm font-semibold select-none">{awayVal}</span>
                 <button type="button" onClick={() => setAwayVal(Math.min(99, awayVal + 1))} disabled={isPending}
-                  className="w-8 h-8 rounded-r border border-l-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none">+</button>
+                  className="w-8 h-8 rounded-r border border-l-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none touch-manipulation">+</button>
               </div>
               <button
                 onClick={handleSave}
@@ -219,7 +220,7 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
       {/* Everyone's picks — visible after deadline */}
       {locked && picks && (
         <details className="mt-2 pt-2 border-t">
-          <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none">
+          <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none py-1">
             Everyone's picks ({predictedCount}{totalPlayers ? ` of ${totalPlayers}` : ''})
           </summary>
           <div className="mt-2 space-y-1.5 pb-1">
