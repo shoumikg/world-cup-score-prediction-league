@@ -123,10 +123,19 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
         {/* Venue */}
         <span className="text-xs text-gray-400 hidden lg:block shrink-0 max-w-36 truncate">{match.venue}</span>
 
-        {/* Result (if entered) — dark scoreboard chip so it can't be confused with a prediction */}
-        {hasResult && (
+        {/* Score chip — appearance depends on match status */}
+        {hasResult && match.status === 'live' && (
+          <span className="inline-flex items-center gap-1.5 self-start sm:self-auto bg-green-600 text-white rounded px-2 py-0.5 shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />
+            <span className="text-[10px] font-semibold">LIVE</span>
+            <span className="text-sm font-bold">{match.home_score}–{match.away_score}</span>
+          </span>
+        )}
+        {hasResult && match.status !== 'live' && (
           <span className="inline-flex items-center gap-1.5 self-start sm:self-auto bg-gray-800 text-white rounded px-2 py-0.5 shrink-0">
-            <span className="text-[10px] font-medium text-gray-400">FT</span>
+            <span className="text-[10px] font-medium text-gray-400">
+              {match.status === 'aet' ? 'AET' : match.status === 'pen' ? 'PEN' : 'FT'}
+            </span>
             <span className="text-sm font-bold">{match.home_score}–{match.away_score}</span>
           </span>
         )}

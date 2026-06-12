@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { computeGroupStandings } from '@/lib/standings'
 import { teamDisplay } from '@/lib/flags'
+import { LiveRefresh } from '@/app/LiveRefresh'
 import type { Match } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -16,10 +17,21 @@ export default async function GroupsPage() {
     .select('*')
     .eq('stage', 'group')
 
-  const standings = computeGroupStandings((matches ?? []) as Match[])
+  const allMatches = (matches ?? []) as Match[]
+  const standings = computeGroupStandings(allMatches)
+
+  // Teams currently in a live match — shown with a pulsing dot in the table
+  const liveTeams = new Set(
+    allMatches
+      .filter(m => m.status === 'live')
+      .flatMap(m => [m.home_team, m.away_team])
+      .filter(Boolean) as string[]
+  )
+  const hasLive = liveTeams.size > 0
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
+      <LiveRefresh hasLive={hasLive} />
       <h1 className="text-xl font-bold mb-1">Group Tables</h1>
       <p className="text-sm text-gray-500 mb-6">
         Updated automatically as results come in. Top two qualify; the eight best
@@ -55,6 +67,9 @@ export default async function GroupsPage() {
                       >
                         {teamDisplay(r.team, r.team)}
                       </a>
+                      {liveTeams.has(r.team) && (
+                        <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse align-middle" title="Playing now" />
+                      )}
                     </td>
                     <td className="text-center text-gray-600">{r.mp}</td>
                     <td className="text-center text-gray-600">{r.w}</td>

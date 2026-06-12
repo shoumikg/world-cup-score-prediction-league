@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { istDateKey, formatDateIST, formatKickoffIST, isKickedOff, isDeadlinePassed, predictionDeadlineUTC } from '@/lib/time'
 import { MatchRow } from '@/app/MatchRow'
 import { DeadlineCountdown } from '@/app/DeadlineCountdown'
+import { LiveRefresh } from '@/app/LiveRefresh'
 import { teamFlag } from '@/lib/flags'
 import type { Match, Prediction, PickEntry } from '@/lib/types'
 
@@ -38,6 +39,8 @@ export default async function SchedulePage(props: {
   const totalPlayers = profileList.length
 
   const allMatches = (matches ?? []) as Match[]
+  const hasLive = allMatches.some(m => m.status === 'live')
+
   const visibleMatches = teamFilter
     ? allMatches.filter(m => m.home_team === teamFilter || m.away_team === teamFilter)
     : allMatches
@@ -55,6 +58,7 @@ export default async function SchedulePage(props: {
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
+      <LiveRefresh hasLive={hasLive} />
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-6">
         <div>
           <h1 className="text-xl font-bold">Schedule & Predictions</h1>
