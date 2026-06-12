@@ -5,9 +5,10 @@ import { fetchLiveFixtures, normalizeTeamName } from '@/lib/api-football'
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// A match is "live" from 5 min before kickoff to 130 min after (covers 90 + ET + pens).
+// A match is "live" from 5 min before kickoff to 150 min after.
+// 150 min covers: 90 play + 15 HT + 30 ET + 5 ET break + ~10 stoppage time.
 const BEFORE_MS = 5 * 60_000
-const AFTER_MS  = 130 * 60_000
+const AFTER_MS  = 150 * 60_000
 
 function inLiveWindow(kickoffUtc: string): boolean {
   const t = new Date(kickoffUtc).getTime()
