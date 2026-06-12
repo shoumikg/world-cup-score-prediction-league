@@ -141,8 +141,9 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
         {/* Desktop: score chip in its usual slot */}
         <span className="hidden sm:block shrink-0">{scoreChip}</span>
 
-        {/* Prediction section */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Prediction section — wraps so the saved/error message drops to its
+            own line on narrow screens instead of overflowing */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {locked ? (
             <div className="flex items-center gap-1.5">
               {displayPred ? (
