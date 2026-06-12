@@ -57,7 +57,7 @@ export default async function SchedulePage(props: {
   const nextMatch = visibleMatches.find(m => !isKickedOff(m.kickoff_utc))
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
+    <div className="max-w-4xl mx-auto px-3 sm:px-4 py-6">
       <LiveRefresh hasLive={hasLive} />
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-6">
         <div>
@@ -82,10 +82,10 @@ export default async function SchedulePage(props: {
 
       <div className="mb-4 text-xs text-gray-400 flex gap-4 flex-wrap">
         <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded bg-green-100 border border-green-300"></span> Exact score <span className="text-gray-300">·</span> 10/15 pts
+          <span className="inline-block w-3 h-3 rounded bg-green-700"></span> Exact score <span className="text-gray-300">·</span> 10/15 pts
         </span>
         <span className="flex items-center gap-1">
-          <span className="inline-block w-3 h-3 rounded bg-orange-100 border border-orange-300"></span> Correct GD <span className="text-gray-300">·</span> 5/8 pts
+          <span className="inline-block w-3 h-3 rounded bg-green-100 border border-green-300"></span> Correct GD <span className="text-gray-300">·</span> 5/8 pts
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-3 rounded bg-yellow-100 border border-yellow-300"></span> Correct result <span className="text-gray-300">·</span> 3/5 pts
@@ -107,13 +107,14 @@ export default async function SchedulePage(props: {
                 Deadline {formatKickoffIST(deadline.toISOString())} IST{deadlinePassed ? ' · closed' : <DeadlineCountdown deadlineISO={deadline.toISOString()} />}
               </span>
             </h2>
-            <div className="bg-white rounded-xl border shadow-sm px-4">
+            <div className="bg-white rounded-xl border shadow-sm px-3 sm:px-4">
               {dayMatches.map(m => {
                 const picks: PickEntry[] | undefined = isDeadlinePassed(m.kickoff_utc)
                   ? profileList
                       .map(profile => ({
                         displayName: profile.display_name,
                         favoriteTeam: profile.favorite_team,
+                        isSelf: profile.id === user.id,
                         prediction: predByMatchUser.get(`${m.id}:${profile.id}`) ?? null,
                       }))
                       .sort((a, b) => a.displayName.localeCompare(b.displayName))

@@ -33,8 +33,8 @@ export function scoreOutcome(p: Prediction, m: Match): Outcome | null {
 }
 
 export const OUTCOME_CLASSES: Record<Outcome, string> = {
-  exact:      'bg-green-100 text-green-800',
-  correct_gd: 'bg-orange-100 text-orange-700',
+  exact:      'bg-green-700 text-white',
+  correct_gd: 'bg-green-100 text-green-800',
   correct:    'bg-yellow-100 text-yellow-800',
   wrong:      'bg-red-100 text-red-700',
 }

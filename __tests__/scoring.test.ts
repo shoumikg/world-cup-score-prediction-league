@@ -68,27 +68,27 @@ describe('scoreColor', () => {
     expect(scoreColor(pred(2, 1), match(null, null))).toContain('gray')
   })
 
-  describe('exact score (green)', () => {
-    it('awards green for a perfect score prediction', () => {
-      expect(scoreColor(pred(2, 1), match(2, 1))).toContain('green')
+  describe('exact score (dark green)', () => {
+    it('awards dark green for a perfect score prediction', () => {
+      expect(scoreColor(pred(2, 1), match(2, 1))).toContain('bg-green-700')
     })
 
-    it('awards green for an exact 0-0 draw', () => {
-      expect(scoreColor(pred(0, 0), match(0, 0))).toContain('green')
+    it('awards dark green for an exact 0-0 draw', () => {
+      expect(scoreColor(pred(0, 0), match(0, 0))).toContain('bg-green-700')
     })
   })
 
-  describe('correct goal difference (orange)', () => {
-    it('awards orange for correct home win with same GD, wrong exact scores', () => {
-      expect(scoreColor(pred(2, 1), match(3, 2))).toContain('orange')
+  describe('correct goal difference (light green)', () => {
+    it('awards light green for correct home win with same GD, wrong exact scores', () => {
+      expect(scoreColor(pred(2, 1), match(3, 2))).toContain('bg-green-100')
     })
 
-    it('awards orange for correct away win with same GD', () => {
-      expect(scoreColor(pred(0, 2), match(1, 3))).toContain('orange')
+    it('awards light green for correct away win with same GD', () => {
+      expect(scoreColor(pred(0, 2), match(1, 3))).toContain('bg-green-100')
     })
 
-    it('awards orange for correct draw prediction with different scoreline', () => {
-      expect(scoreColor(pred(1, 1), match(2, 2))).toContain('orange')
+    it('awards light green for correct draw prediction with different scoreline', () => {
+      expect(scoreColor(pred(1, 1), match(2, 2))).toContain('bg-green-100')
     })
   })
 

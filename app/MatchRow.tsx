@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { savePrediction } from '@/app/actions'
-import { stageLabel, scoreColor } from '@/lib/scoring'
+import { stageLabel, scoreColor, scoreOutcome, type Outcome } from '@/lib/scoring'
 import { teamDisplay } from '@/lib/flags'
 import { kickoffTimerDelay, predictionDeadlineUTC } from '@/lib/time'
 import { teamFlag } from '@/lib/flags'
@@ -23,11 +23,14 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
 
   const deadlineISO = predictionDeadlineUTC(match.kickoff_utc).toISOString()
 
-  const [homeVal, setHomeVal] = useState(prediction?.home_pred?.toString() ?? '')
-  const [awayVal, setAwayVal] = useState(prediction?.away_pred?.toString() ?? '')
+  const [homeVal, setHomeVal] = useState(prediction?.home_pred ?? 0)
+  const [awayVal, setAwayVal] = useState(prediction?.away_pred ?? 0)
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const [isPending, startTransition] = useTransition()
-  const lastSaved = useRef({ home: homeVal, away: awayVal })
+  const lastSaved = useRef<{ home: number | null; away: number | null }>({
+    home: prediction?.home_pred ?? null,
+    away: prediction?.away_pred ?? null,
+  })
 
   // The server-rendered isLocked is frozen at page load; flip the row at the
   // 9 PM IST deadline even if the tab stays open. Client clock is a UX hint
@@ -52,14 +55,8 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
       setClientLocked(true)
       return
     }
-    const h = parseInt(homeVal)
-    const a = parseInt(awayVal)
-    if (isNaN(h) || isNaN(a) || h < 0 || a < 0) {
-      setMsg({ text: 'Enter valid scores (0+)', ok: false })
-      return
-    }
     startTransition(async () => {
-      const res = await savePrediction(match.id, h, a)
+      const res = await savePrediction(match.id, homeVal, awayVal)
       if (res.error) {
         setMsg({ text: res.error, ok: false })
         // Server says the match started (e.g. client clock is behind) — lock the row
@@ -74,9 +71,9 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
 
   const hasResult = match.home_score !== null
 
-  // True when the current inputs are exactly what's stored in the DB
+  // True when the current ticker values match what's stored in the DB
   const isRecorded =
-    lastSaved.current.home !== '' &&
+    lastSaved.current.home !== null &&
     homeVal === lastSaved.current.home &&
     awayVal === lastSaved.current.away
 
@@ -85,63 +82,82 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
   // arrived yet (saved after page load, locked at kickoff without reload).
   const displayPred: Prediction | undefined =
     prediction ??
-    (lastSaved.current.home !== ''
+    (lastSaved.current.home !== null
       ? {
           user_id: '',
           match_id: match.id,
-          home_pred: parseInt(lastSaved.current.home),
-          away_pred: parseInt(lastSaved.current.away),
+          home_pred: lastSaved.current.home,
+          away_pred: lastSaved.current.away!,
           updated_at: '',
         }
       : undefined)
 
   const predictedCount = picks?.filter(p => p.prediction !== null).length ?? 0
 
+  // Once a result is in, order everyone's picks best-first (mini leaderboard
+  // for the match); before that, keep the server's alphabetical order.
+  const OUTCOME_RANK: Record<Outcome, number> = { exact: 0, correct_gd: 1, correct: 2, wrong: 3 }
+  const entryRank = (e: PickEntry) =>
+    e.prediction
+      ? OUTCOME_RANK[scoreOutcome(
+          { user_id: '', match_id: match.id, home_pred: e.prediction.homePred, away_pred: e.prediction.awayPred, updated_at: '' },
+          match
+        )!]
+      : 4 // no pick sorts last
+  const displayedPicks = picks && hasResult
+    ? [...picks].sort((a, b) => entryRank(a) - entryRank(b) || a.displayName.localeCompare(b.displayName))
+    : picks
+
+  // Score chip — appearance depends on match status. Rendered in two spots:
+  // beside the stage badge on mobile, between venue and prediction on sm+.
+  const scoreChip = !hasResult ? null : match.status === 'live' ? (
+    <span className="inline-flex items-center gap-1.5 bg-green-600 text-white rounded px-2 py-0.5 shrink-0">
+      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />
+      <span className="text-[10px] font-semibold">LIVE</span>
+      <span className="text-sm font-bold">{match.home_score}–{match.away_score}</span>
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 bg-gray-800 text-white rounded px-2 py-0.5 shrink-0">
+      <span className="text-[10px] font-medium text-gray-400">
+        {match.status === 'aet' ? 'AET' : match.status === 'pen' ? 'PEN' : 'FT'}
+      </span>
+      <span className="text-sm font-bold">{match.home_score}–{match.away_score}</span>
+    </span>
+  )
+
   return (
     <div className="py-3 border-b last:border-0">
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-        {/* Match meta */}
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <span className="text-xs text-gray-400 w-6 text-right shrink-0">#{match.id}</span>
-          <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${
-            match.stage === 'group'
-              ? 'bg-blue-100 text-blue-700'
-              : 'bg-purple-100 text-purple-700'
-          }`}>
-            {match.stage === 'group' ? `Grp ${match.group_name}` : stageLabel(match.stage)}
-          </span>
+        {/* Match meta + teams: stacked on mobile, inline on sm+ */}
+        <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400 w-6 text-right shrink-0">#{match.id}</span>
+            <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${
+              match.stage === 'group'
+                ? 'bg-blue-100 text-blue-700'
+                : 'bg-purple-100 text-purple-700'
+            }`}>
+              {match.stage === 'group' ? `Grp ${match.group_name}` : stageLabel(match.stage)}
+            </span>
+            {/* Mobile: score chip rides the meta line, pushed right */}
+            <span className="ml-auto sm:hidden">{scoreChip}</span>
+          </div>
 
-          <span className={`text-sm font-medium truncate ${isPlaceholder ? 'text-gray-400 italic' : ''}`}>
-            {homeName}
-          </span>
-          <span className="text-xs text-gray-400 shrink-0">vs</span>
-          <span className={`text-sm font-medium truncate ${isPlaceholder ? 'text-gray-400 italic' : ''}`}>
-            {awayName}
+          {/* Full team names — wrap instead of truncating */}
+          <span className={`text-sm font-medium sm:min-w-0 ${isPlaceholder ? 'text-gray-400 italic' : ''}`}>
+            {homeName} <span className="text-xs text-gray-400 font-normal">vs</span> {awayName}
           </span>
         </div>
 
         {/* Venue */}
         <span className="text-xs text-gray-400 hidden lg:block shrink-0 max-w-36 truncate">{match.venue}</span>
 
-        {/* Score chip — appearance depends on match status */}
-        {hasResult && match.status === 'live' && (
-          <span className="inline-flex items-center gap-1.5 self-start sm:self-auto bg-green-600 text-white rounded px-2 py-0.5 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />
-            <span className="text-[10px] font-semibold">LIVE</span>
-            <span className="text-sm font-bold">{match.home_score}–{match.away_score}</span>
-          </span>
-        )}
-        {hasResult && match.status !== 'live' && (
-          <span className="inline-flex items-center gap-1.5 self-start sm:self-auto bg-gray-800 text-white rounded px-2 py-0.5 shrink-0">
-            <span className="text-[10px] font-medium text-gray-400">
-              {match.status === 'aet' ? 'AET' : match.status === 'pen' ? 'PEN' : 'FT'}
-            </span>
-            <span className="text-sm font-bold">{match.home_score}–{match.away_score}</span>
-          </span>
-        )}
+        {/* Desktop: score chip in its usual slot */}
+        <span className="hidden sm:block shrink-0">{scoreChip}</span>
 
-        {/* Prediction section */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Prediction section — wraps so the saved/error message drops to its
+            own line on narrow screens instead of overflowing */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {locked ? (
             <div className="flex items-center gap-1.5">
               {displayPred ? (
@@ -156,27 +172,21 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
             </div>
           ) : (
             <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                min={0}
-                max={99}
-                value={homeVal}
-                onChange={e => setHomeVal(e.target.value)}
-                disabled={isPending}
-                className="w-12 border rounded px-1.5 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
-                placeholder="–"
-              />
+              <div className="flex items-center">
+                <button type="button" onClick={() => setHomeVal(Math.max(0, homeVal - 1))} disabled={isPending}
+                  className="w-8 h-8 rounded-l border border-r-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none touch-manipulation">−</button>
+                <span className="w-8 h-8 border-y border-gray-300 flex items-center justify-center text-sm font-semibold select-none">{homeVal}</span>
+                <button type="button" onClick={() => setHomeVal(Math.min(99, homeVal + 1))} disabled={isPending}
+                  className="w-8 h-8 rounded-r border border-l-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none touch-manipulation">+</button>
+              </div>
               <span className="text-gray-400 text-xs">–</span>
-              <input
-                type="number"
-                min={0}
-                max={99}
-                value={awayVal}
-                onChange={e => setAwayVal(e.target.value)}
-                disabled={isPending}
-                className="w-12 border rounded px-1.5 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
-                placeholder="–"
-              />
+              <div className="flex items-center">
+                <button type="button" onClick={() => setAwayVal(Math.max(0, awayVal - 1))} disabled={isPending}
+                  className="w-8 h-8 rounded-l border border-r-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none touch-manipulation">−</button>
+                <span className="w-8 h-8 border-y border-gray-300 flex items-center justify-center text-sm font-semibold select-none">{awayVal}</span>
+                <button type="button" onClick={() => setAwayVal(Math.min(99, awayVal + 1))} disabled={isPending}
+                  className="w-8 h-8 rounded-r border border-l-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none touch-manipulation">+</button>
+              </div>
               <button
                 onClick={handleSave}
                 disabled={isPending}
@@ -223,13 +233,17 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
       {/* Everyone's picks — visible after deadline */}
       {locked && picks && (
         <details className="mt-2 pt-2 border-t">
-          <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none">
+          <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none py-1">
             Everyone's picks ({predictedCount}{totalPlayers ? ` of ${totalPlayers}` : ''})
           </summary>
-          <div className="mt-2 space-y-1.5 pb-1">
-            {picks.map((entry, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="text-xs text-gray-600 min-w-0 flex-1 truncate">
+          <div className="mt-2 pb-1">
+            {displayedPicks!.map((entry, i) => (
+              <div key={i} className={`flex items-center gap-2 px-2 py-1.5 rounded ${
+                entry.isSelf ? 'bg-green-50' : 'odd:bg-gray-50'
+              }`}>
+                <span className={`text-xs min-w-0 flex-1 truncate ${
+                  entry.isSelf ? 'text-green-900 font-semibold' : 'text-gray-600'
+                }`}>
                   {teamFlag(entry.favoriteTeam) && (
                     <span className="mr-1">{teamFlag(entry.favoriteTeam)}</span>
                   )}
