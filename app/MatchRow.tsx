@@ -222,9 +222,9 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
           <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none py-1">
             Everyone's picks ({predictedCount}{totalPlayers ? ` of ${totalPlayers}` : ''})
           </summary>
-          <div className="mt-2 space-y-1.5 pb-1">
+          <div className="mt-2 pb-1">
             {picks.map((entry, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={i} className="flex items-center gap-2 px-2 py-1.5 rounded odd:bg-gray-50">
                 <span className="text-xs text-gray-600 min-w-0 flex-1 truncate">
                   {teamFlag(entry.favoriteTeam) && (
                     <span className="mr-1">{teamFlag(entry.favoriteTeam)}</span>
