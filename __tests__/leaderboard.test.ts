@@ -391,4 +391,103 @@ describe('computeLeaderboard', () => {
     expect(rows[0].total).toBe(rows[1].total) // same total
     expect(rows[0].exact).toBe(1)
   })
+
+  it('breaks total tie by bonus points before exact count', () => {
+    // Alice: bonus 25, no match pts → total 25, 0 exact.
+    // Bob: group exact (10) + final exact (15) → total 25, 2 exact, bonus 0.
+    // Bonus outranks exact in the tie-break chain, so Alice wins.
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice'), profile('u2', 'Bob')],
+      [pred('u2', 1, 2, 1), pred('u2', 2, 2, 1)],
+      [match(1, 2, 1, 'group'), match(2, 2, 1, 'final')],
+      [grade('u1', 1, true)]
+    )
+    expect(rows[0].displayName).toBe('Alice')
+    expect(rows[0].total).toBe(rows[1].total) // both 25
+    expect(rows[0].rank).toBe(1)
+    expect(rows[1].rank).toBe(2)              // bonus differs → separate ranks
+  })
+
+  // ── rank computation ──────────────────────────────────────────
+
+  it('single player always gets rank 1', () => {
+    const rows = computeLeaderboard([profile('u1', 'Alice')], [], [])
+    expect(rows[0].rank).toBe(1)
+  })
+
+  it('no ties: sequential ranks 1-2-3', () => {
+    // Alice exact (10pts), Bob correct_gd (5pts), Charlie correct (3pts)
+    // pred(2,0) vs match(2,1): home wins both, GD 2 vs 1 → correct (not correct_gd)
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice'), profile('u2', 'Bob'), profile('u3', 'Charlie')],
+      [
+        pred('u1', 1, 2, 1),  // Alice exact (2-1 = 2-1)
+        pred('u2', 1, 3, 2),  // Bob correct_gd (pred GD=1, actual GD=1, home win)
+        pred('u3', 1, 2, 0),  // Charlie correct (pred GD=2, actual GD=1, same winner)
+      ],
+      [match(1, 2, 1)]
+    )
+    expect(rows.map(r => r.rank)).toEqual([1, 2, 3])
+  })
+
+  it('fully-identical stats share the same rank', () => {
+    // Both players have no predictions: total=0, exact=0, correct_gd=0, correct=0, wrong=0
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice'), profile('u2', 'Bob')],
+      [],
+      [match(1, 2, 1)]
+    )
+    expect(rows[0].rank).toBe(1)
+    expect(rows[1].rank).toBe(1)
+  })
+
+  it('same total but different exact counts → different ranks', () => {
+    // Alice: 1 exact (10 pts). Bob: 2 correct_gd (5+5=10 pts). Same total, Alice ranks higher.
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice'), profile('u2', 'Bob')],
+      [
+        pred('u1', 1, 2, 1),                       // Alice exact  on m1
+        pred('u2', 2, 3, 2), pred('u2', 3, 3, 2),  // Bob 2×correct_gd (pred 3-2, actual 4-3)
+      ],
+      [match(1, 2, 1), match(2, 4, 3), match(3, 4, 3)]
+    )
+    expect(rows[0].displayName).toBe('Alice')
+    expect(rows[0].total).toBe(rows[1].total) // both 10 pts
+    expect(rows[0].rank).toBe(1)
+    expect(rows[1].rank).toBe(2)              // different rank — exact counts differ
+  })
+
+  it('rank skips correctly after a tied group', () => {
+    // Alice+Bob tied (rank 1), Charlie is rank 3 (not 2)
+    const rows = computeLeaderboard(
+      [profile('u1', 'Alice'), profile('u2', 'Bob'), profile('u3', 'Charlie')],
+      [
+        pred('u1', 1, 2, 1),  // Alice exact (10 pts)
+        pred('u2', 1, 2, 1),  // Bob exact (10 pts) — identical to Alice
+        pred('u3', 1, 1, 0),  // Charlie correct (3 pts)
+      ],
+      [match(1, 2, 1)]
+    )
+    const alice   = rows.find(r => r.displayName === 'Alice')!
+    const bob     = rows.find(r => r.displayName === 'Bob')!
+    const charlie = rows.find(r => r.displayName === 'Charlie')!
+    expect(alice.rank).toBe(1)
+    expect(bob.rank).toBe(1)
+    expect(charlie.rank).toBe(3)  // skips rank 2
+  })
+
+  it('three-way tie all get rank 1, next player gets rank 4', () => {
+    const rows = computeLeaderboard(
+      [profile('u1', 'A'), profile('u2', 'B'), profile('u3', 'C'), profile('u4', 'D')],
+      [
+        pred('u1', 1, 2, 1), pred('u2', 1, 2, 1), pred('u3', 1, 2, 1), // A, B, C: exact (10 pts)
+        pred('u4', 1, 1, 0),                                             // D: correct (3 pts)
+      ],
+      [match(1, 2, 1)]
+    )
+    expect(rows.find(r => r.displayName === 'A')!.rank).toBe(1)
+    expect(rows.find(r => r.displayName === 'B')!.rank).toBe(1)
+    expect(rows.find(r => r.displayName === 'C')!.rank).toBe(1)
+    expect(rows.find(r => r.displayName === 'D')!.rank).toBe(4)
+  })
 })
