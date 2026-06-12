@@ -10,8 +10,8 @@ export default function GuidePage() {
         <p>
           Before each match kicks off, you predict the final scoreline — not just who wins, but the
           exact score. After kickoff, your prediction locks and you can see what everyone else picked.
-          Once the admin enters the real result, your prediction gets colour-coded based on how close
-          you were.
+          Scores are fetched automatically while matches are being played, and once a result is in,
+          your prediction gets colour-coded based on how close you were.
         </p>
       </Section>
 
@@ -19,12 +19,13 @@ export default function GuidePage() {
         <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700">
           <li>Open the Schedule page (the default page after logging in).</li>
           <li>Find the match you want to predict — matches are grouped by date in IST.</li>
-          <li>Type the home score in the left box and the away score in the right box.</li>
+          <li>Set each team's score with the <strong>−</strong> and <strong>+</strong> buttons —
+              home team on the left, away team on the right.</li>
           <li>Hit <strong>Save</strong>. You'll see a brief "Saved!" confirmation, and a
               <strong> ✓ Recorded</strong> marker stays next to the match.</li>
-          <li>You can come back and change it any number of times before kickoff. If you edit
-              the numbers, the marker disappears until you save again — if you see
-              ✓ Recorded, what's in the boxes is what counts.</li>
+          <li>You can come back and change it any number of times before the deadline. If you
+              change the numbers, the marker disappears until you save again — if you see
+              ✓ Recorded, the score currently shown is what counts.</li>
         </ol>
         <Note>
           The <strong>Jump to next match →</strong> link at the top of the page scrolls straight
@@ -37,7 +38,7 @@ export default function GuidePage() {
         <p>
           Each day at <strong>9:00 PM IST</strong>, predictions for all matches taking place the
           following calendar day (IST) are locked. The deadline applies to the entire day's
-          fixtures at once — not per match. The input boxes disappear and are replaced by your
+          fixtures at once — not per match. The score controls disappear and are replaced by your
           saved pick (shown as a chip). If you haven't submitted anything by then, you get no
           score for those matches.
         </p>
@@ -49,7 +50,7 @@ export default function GuidePage() {
       </Section>
 
       <Section title="Colour coding">
-        <p className="mb-3">After the admin enters a result, your prediction chip changes colour:</p>
+        <p className="mb-3">Once a match has a result, your prediction chip changes colour:</p>
         <div className="space-y-2 text-sm">
           <div className="flex items-start gap-3">
             <span className="px-2 py-0.5 rounded bg-green-700 text-white font-semibold text-xs w-24 text-center shrink-0 mt-0.5">2 – 1</span>
@@ -69,9 +70,27 @@ export default function GuidePage() {
           </div>
           <div className="flex items-start gap-3">
             <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-700 font-semibold text-xs w-24 text-center shrink-0 mt-0.5">2 – 1</span>
-            <span><strong>No result yet</strong> — the match has kicked off but the score hasn't been entered yet.</span>
+            <span><strong>No result yet</strong> — the match has kicked off but no score is available yet.</span>
           </div>
         </div>
+      </Section>
+
+      <Section title="Live scores">
+        <p>
+          While a match is being played, its score is fetched automatically and shown on the
+          Schedule page as a <strong className="inline-flex items-center gap-1 bg-green-600 text-white rounded px-1.5 py-0.5 text-xs align-middle"><span className="w-1.5 h-1.5 rounded-full bg-white" />LIVE 1–0</strong> chip.
+          The page refreshes itself every minute during live matches — no need to reload. When the
+          match ends, the chip turns dark and shows <strong>FT</strong> (full time),
+          <strong> AET</strong> (after extra time) or <strong>PEN</strong> (decided on penalties).
+        </p>
+        <p className="mt-2">
+          Group tables also update live — a team currently playing shows a pulsing green dot next
+          to its name, and the standings already include the in-progress score.
+        </p>
+        <Note>
+          Live scores come from an external data feed, with the admin able to enter or correct any
+          result manually as a failsafe. For predictions, only the final result matters.
+        </Note>
       </Section>
 
       <Section title="Seeing other people's picks">
@@ -110,9 +129,10 @@ export default function GuidePage() {
       <Section title="Group tables">
         <p>
           The <strong>Groups</strong> page shows live standings for all 12 groups — matches played,
-          wins, draws, losses, goals and points. It updates automatically as results are entered.
-          Top two in each group qualify for the Round of 32, along with the eight best
-          third-placed teams.
+          wins, draws, losses, goals and points. It updates automatically as results come in,
+          including matches still in progress. Top two in each group qualify for the Round of 32,
+          along with the eight best third-placed teams. Tap any team name to filter the Schedule
+          page to just that team's matches.
         </p>
       </Section>
 
@@ -196,9 +216,21 @@ export default function GuidePage() {
         <p className="mt-2">
           The <strong>Leaderboard</strong> shows each player's tally broken down by category —
           Exact, GD, Result, Wrong, and Bonus — plus a <strong>Pts</strong> column showing your
-          total. Rankings are by total points first; ties are broken by exact scores, then GD
-          predictions, then correct results. Players appear by their <strong>display name</strong>,
-          never their username.
+          total. Players appear by their <strong>display name</strong>, never their username.
+        </p>
+
+        <p className="mt-2">
+          <strong>Ranking and tie-breaks:</strong> players are ranked by total points. When totals
+          are equal, ties are broken in this order — more <strong>bonus points</strong>, more
+          <strong> exact scores</strong>, more <strong>correct GD</strong> predictions, more
+          <strong> correct results</strong>, and finally fewer <strong>wrong</strong> predictions.
+          Players who are equal on <em>all</em> of these share the same rank, and the next rank is
+          skipped (two players tied at #1 means the next player is #3).
+        </p>
+
+        <p className="mt-2">
+          Tap any other player's name on the leaderboard to open a <strong>head-to-head
+          comparison</strong> of their predictions against yours, match by match.
         </p>
       </Section>
     </div>

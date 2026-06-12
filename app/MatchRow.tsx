@@ -94,48 +94,52 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
 
   const predictedCount = picks?.filter(p => p.prediction !== null).length ?? 0
 
+  // Score chip — appearance depends on match status. Rendered in two spots:
+  // beside the stage badge on mobile, between venue and prediction on sm+.
+  const scoreChip = !hasResult ? null : match.status === 'live' ? (
+    <span className="inline-flex items-center gap-1.5 bg-green-600 text-white rounded px-2 py-0.5 shrink-0">
+      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />
+      <span className="text-[10px] font-semibold">LIVE</span>
+      <span className="text-sm font-bold">{match.home_score}–{match.away_score}</span>
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1.5 bg-gray-800 text-white rounded px-2 py-0.5 shrink-0">
+      <span className="text-[10px] font-medium text-gray-400">
+        {match.status === 'aet' ? 'AET' : match.status === 'pen' ? 'PEN' : 'FT'}
+      </span>
+      <span className="text-sm font-bold">{match.home_score}–{match.away_score}</span>
+    </span>
+  )
+
   return (
     <div className="py-3 border-b last:border-0">
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-        {/* Match meta */}
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <span className="text-xs text-gray-400 w-6 text-right shrink-0">#{match.id}</span>
-          <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${
-            match.stage === 'group'
-              ? 'bg-blue-100 text-blue-700'
-              : 'bg-purple-100 text-purple-700'
-          }`}>
-            {match.stage === 'group' ? `Grp ${match.group_name}` : stageLabel(match.stage)}
-          </span>
+        {/* Match meta + teams: stacked on mobile, inline on sm+ */}
+        <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400 w-6 text-right shrink-0">#{match.id}</span>
+            <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${
+              match.stage === 'group'
+                ? 'bg-blue-100 text-blue-700'
+                : 'bg-purple-100 text-purple-700'
+            }`}>
+              {match.stage === 'group' ? `Grp ${match.group_name}` : stageLabel(match.stage)}
+            </span>
+            {/* Mobile: score chip rides the meta line, pushed right */}
+            <span className="ml-auto sm:hidden">{scoreChip}</span>
+          </div>
 
-          <span className={`text-sm font-medium truncate ${isPlaceholder ? 'text-gray-400 italic' : ''}`}>
-            {homeName}
-          </span>
-          <span className="text-xs text-gray-400 shrink-0">vs</span>
-          <span className={`text-sm font-medium truncate ${isPlaceholder ? 'text-gray-400 italic' : ''}`}>
-            {awayName}
+          {/* Full team names — wrap instead of truncating */}
+          <span className={`text-sm font-medium sm:min-w-0 ${isPlaceholder ? 'text-gray-400 italic' : ''}`}>
+            {homeName} <span className="text-xs text-gray-400 font-normal">vs</span> {awayName}
           </span>
         </div>
 
         {/* Venue */}
         <span className="text-xs text-gray-400 hidden lg:block shrink-0 max-w-36 truncate">{match.venue}</span>
 
-        {/* Score chip — appearance depends on match status */}
-        {hasResult && match.status === 'live' && (
-          <span className="inline-flex items-center gap-1.5 self-start sm:self-auto bg-green-600 text-white rounded px-2 py-0.5 shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />
-            <span className="text-[10px] font-semibold">LIVE</span>
-            <span className="text-sm font-bold">{match.home_score}–{match.away_score}</span>
-          </span>
-        )}
-        {hasResult && match.status !== 'live' && (
-          <span className="inline-flex items-center gap-1.5 self-start sm:self-auto bg-gray-800 text-white rounded px-2 py-0.5 shrink-0">
-            <span className="text-[10px] font-medium text-gray-400">
-              {match.status === 'aet' ? 'AET' : match.status === 'pen' ? 'PEN' : 'FT'}
-            </span>
-            <span className="text-sm font-bold">{match.home_score}–{match.away_score}</span>
-          </span>
-        )}
+        {/* Desktop: score chip in its usual slot */}
+        <span className="hidden sm:block shrink-0">{scoreChip}</span>
 
         {/* Prediction section */}
         <div className="flex items-center gap-2 shrink-0">
