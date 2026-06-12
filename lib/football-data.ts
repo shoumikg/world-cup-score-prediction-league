@@ -1,8 +1,10 @@
 // Maps football-data.org team names → names stored in our DB.
 //
-// BEFORE FIRST LIVE MATCH: verify this table against the API:
-//   GET https://api.football-data.org/v4/competitions/WC/teams
-//   (header: X-Auth-Token: <your key>)
+// VERIFIED 2026-06-12 against GET /v4/competitions/WC/teams (all 48 teams):
+// only United States→USA, Turkey→Türkiye, Cape Verde Islands→Cape Verde are
+// actually needed; the rest match our DB exactly (incl. South Korea, Czechia,
+// Bosnia-Herzegovina, Congo DR, Ivory Coast, Curaçao). Extra entries below are
+// harmless and kept as insurance against mid-tournament renames.
 //
 // Any name not listed here passes through unchanged. Missing entries show up
 // under "unmatched" in the sync response and Vercel function logs.
