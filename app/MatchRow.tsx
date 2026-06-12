@@ -23,11 +23,14 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
 
   const deadlineISO = predictionDeadlineUTC(match.kickoff_utc).toISOString()
 
-  const [homeVal, setHomeVal] = useState(prediction?.home_pred?.toString() ?? '')
-  const [awayVal, setAwayVal] = useState(prediction?.away_pred?.toString() ?? '')
+  const [homeVal, setHomeVal] = useState(prediction?.home_pred ?? 0)
+  const [awayVal, setAwayVal] = useState(prediction?.away_pred ?? 0)
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const [isPending, startTransition] = useTransition()
-  const lastSaved = useRef({ home: homeVal, away: awayVal })
+  const lastSaved = useRef<{ home: number | null; away: number | null }>({
+    home: prediction?.home_pred ?? null,
+    away: prediction?.away_pred ?? null,
+  })
 
   // The server-rendered isLocked is frozen at page load; flip the row at the
   // 9 PM IST deadline even if the tab stays open. Client clock is a UX hint
@@ -52,14 +55,8 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
       setClientLocked(true)
       return
     }
-    const h = parseInt(homeVal)
-    const a = parseInt(awayVal)
-    if (isNaN(h) || isNaN(a) || h < 0 || a < 0) {
-      setMsg({ text: 'Enter valid scores (0+)', ok: false })
-      return
-    }
     startTransition(async () => {
-      const res = await savePrediction(match.id, h, a)
+      const res = await savePrediction(match.id, homeVal, awayVal)
       if (res.error) {
         setMsg({ text: res.error, ok: false })
         // Server says the match started (e.g. client clock is behind) — lock the row
@@ -74,9 +71,9 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
 
   const hasResult = match.home_score !== null
 
-  // True when the current inputs are exactly what's stored in the DB
+  // True when the current ticker values match what's stored in the DB
   const isRecorded =
-    lastSaved.current.home !== '' &&
+    lastSaved.current.home !== null &&
     homeVal === lastSaved.current.home &&
     awayVal === lastSaved.current.away
 
@@ -85,12 +82,12 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
   // arrived yet (saved after page load, locked at kickoff without reload).
   const displayPred: Prediction | undefined =
     prediction ??
-    (lastSaved.current.home !== ''
+    (lastSaved.current.home !== null
       ? {
           user_id: '',
           match_id: match.id,
-          home_pred: parseInt(lastSaved.current.home),
-          away_pred: parseInt(lastSaved.current.away),
+          home_pred: lastSaved.current.home,
+          away_pred: lastSaved.current.away!,
           updated_at: '',
         }
       : undefined)
@@ -155,28 +152,22 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                min={0}
-                max={99}
-                value={homeVal}
-                onChange={e => setHomeVal(e.target.value)}
-                disabled={isPending}
-                className="w-12 border rounded px-1.5 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
-                placeholder="–"
-              />
+            <div className="flex items-center gap-2">
+              <div className="flex items-center">
+                <button type="button" onClick={() => setHomeVal(Math.max(0, homeVal - 1))} disabled={isPending}
+                  className="w-8 h-8 rounded-l border border-r-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none">−</button>
+                <span className="w-8 h-8 border-y border-gray-300 flex items-center justify-center text-sm font-semibold select-none">{homeVal}</span>
+                <button type="button" onClick={() => setHomeVal(Math.min(99, homeVal + 1))} disabled={isPending}
+                  className="w-8 h-8 rounded-r border border-l-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none">+</button>
+              </div>
               <span className="text-gray-400 text-xs">–</span>
-              <input
-                type="number"
-                min={0}
-                max={99}
-                value={awayVal}
-                onChange={e => setAwayVal(e.target.value)}
-                disabled={isPending}
-                className="w-12 border rounded px-1.5 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50"
-                placeholder="–"
-              />
+              <div className="flex items-center">
+                <button type="button" onClick={() => setAwayVal(Math.max(0, awayVal - 1))} disabled={isPending}
+                  className="w-8 h-8 rounded-l border border-r-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none">−</button>
+                <span className="w-8 h-8 border-y border-gray-300 flex items-center justify-center text-sm font-semibold select-none">{awayVal}</span>
+                <button type="button" onClick={() => setAwayVal(Math.min(99, awayVal + 1))} disabled={isPending}
+                  className="w-8 h-8 rounded-r border border-l-0 border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center disabled:opacity-50 select-none">+</button>
+              </div>
               <button
                 onClick={handleSave}
                 disabled={isPending}

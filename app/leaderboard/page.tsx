@@ -87,12 +87,12 @@ export default async function LeaderboardPage() {
                   )}
                 </td>
                 <td className="text-center py-2.5">
-                  <span className="inline-block w-8 px-1 py-0.5 rounded bg-green-100 text-green-800 font-semibold text-xs">
+                  <span className="inline-block w-8 px-1 py-0.5 rounded bg-green-700 text-white font-semibold text-xs">
                     {r.exact}
                   </span>
                 </td>
                 <td className="text-center py-2.5">
-                  <span className="inline-block w-8 px-1 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold text-xs">
+                  <span className="inline-block w-8 px-1 py-0.5 rounded bg-green-100 text-green-800 font-semibold text-xs">
                     {r.correct_gd}
                   </span>
                 </td>

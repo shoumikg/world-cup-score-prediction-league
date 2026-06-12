@@ -52,11 +52,11 @@ export default function GuidePage() {
         <p className="mb-3">After the admin enters a result, your prediction chip changes colour:</p>
         <div className="space-y-2 text-sm">
           <div className="flex items-start gap-3">
-            <span className="px-2 py-0.5 rounded bg-green-100 text-green-800 font-semibold text-xs w-24 text-center shrink-0 mt-0.5">2 – 1</span>
+            <span className="px-2 py-0.5 rounded bg-green-700 text-white font-semibold text-xs w-24 text-center shrink-0 mt-0.5">2 – 1</span>
             <span><strong>Exact score</strong> — you predicted the precise scoreline. <span className="text-gray-500">(10 pts group · 15 pts knockout)</span></span>
           </div>
           <div className="flex items-start gap-3">
-            <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold text-xs w-24 text-center shrink-0 mt-0.5">3 – 2</span>
+            <span className="px-2 py-0.5 rounded bg-green-100 text-green-800 font-semibold text-xs w-24 text-center shrink-0 mt-0.5">3 – 2</span>
             <span><strong>Correct goal difference</strong> — right result and right margin, wrong scoreline. (e.g. predict 2–1, actual 3–2; or predict 1–1, actual 2–2.) <span className="text-gray-500">(5 pts group · 8 pts knockout)</span></span>
           </div>
           <div className="flex items-start gap-3">
@@ -151,7 +151,7 @@ export default function GuidePage() {
             <tbody>
               <tr>
                 <td className="px-3 py-2 border border-gray-200">
-                  <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-semibold">Green</span>
+                  <span className="px-1.5 py-0.5 rounded bg-green-700 text-white font-semibold">Dark green</span>
                 </td>
                 <td className="px-3 py-2 border border-gray-200">Exact score</td>
                 <td className="px-3 py-2 border border-gray-200 text-center font-semibold">10</td>
@@ -159,7 +159,7 @@ export default function GuidePage() {
               </tr>
               <tr className="bg-gray-50/50">
                 <td className="px-3 py-2 border border-gray-200">
-                  <span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-semibold">Orange</span>
+                  <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-semibold">Light green</span>
                 </td>
                 <td className="px-3 py-2 border border-gray-200">Correct GD, correct result direction, wrong score</td>
                 <td className="px-3 py-2 border border-gray-200 text-center font-semibold">5</td>
