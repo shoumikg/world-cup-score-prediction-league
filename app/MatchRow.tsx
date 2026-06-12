@@ -50,22 +50,6 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
 
   const locked = isLocked || clientLocked
 
-  const [countdown, setCountdown] = useState<string | null>(null)
-  useEffect(() => {
-    if (locked) { setCountdown(null); return }
-    function tick() {
-      const msLeft = new Date(deadlineISO).getTime() - Date.now()
-      if (msLeft <= 0 || msLeft > 24 * 3600_000) { setCountdown(null); return }
-      const totalSecs = Math.floor(msLeft / 1000)
-      const h = Math.floor(totalSecs / 3600)
-      const m = Math.floor((totalSecs % 3600) / 60)
-      const s = totalSecs % 60
-      setCountdown(h >= 1 ? `${h}h ${m}m left` : `${m}m ${s.toString().padStart(2, '0')}s left`)
-    }
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [locked, deadlineISO])
 
   function handleSave() {
     if (kickoffTimerDelay(deadlineISO) === 'past') {
@@ -225,15 +209,6 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
                 ✓ Recorded
               </span>
             )
-          )}
-          {!locked && countdown && (
-            <span className={`text-xs font-medium whitespace-nowrap ${
-              new Date(deadlineISO).getTime() - Date.now() < 3600_000
-                ? 'text-red-500'
-                : 'text-orange-500'
-            }`}>
-              {countdown}
-            </span>
           )}
         </div>
       </div>
