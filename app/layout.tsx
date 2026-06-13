@@ -4,6 +4,7 @@ import "./globals.css";
 import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/actions";
 import { FeedbackWidget } from "@/app/FeedbackWidget";
+import { ThemeToggle } from "@/app/ThemeToggle";
 import { WhatsNewModal } from "@/app/WhatsNewModal";
 import { unseenEntries } from "@/lib/changelog";
 import { Analytics } from "@vercel/analytics/next";
@@ -19,8 +20,13 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  colorScheme: "light",
+  colorScheme: "light dark",
 };
+
+// Runs synchronously in <head> before first paint: applies the saved theme, or
+// falls back to the device's preferred colour scheme. Setting the class and
+// color-scheme here avoids any flash of the wrong theme on load.
+const themeScript = `(function(){try{var s=localStorage.getItem('theme');var d=s?s==='dark':matchMedia('(prefers-color-scheme: dark)').matches;var r=document.documentElement;r.classList.toggle('dark',d);r.style.colorScheme=d?'dark':'light';}catch(e){}})();`;
 
 export default async function RootLayout({
   children,
@@ -45,14 +51,20 @@ export default async function RootLayout({
   }
 
   return (
-    <html lang="en" className={`${geistSans.variable} h-full antialiased`}>
+    <html lang="en" className={`${geistSans.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="min-h-full flex flex-col bg-gray-50">
         {user && (
           <nav className="bg-white border-b shadow-sm sticky top-0 z-20">
             <div className="max-w-4xl mx-auto px-4">
               {/* Row 1: logo + user actions */}
               <div className="h-12 flex items-center justify-between gap-3">
-                <span className="font-bold text-green-700">⚽ WC26</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="font-bold text-green-700 dark:text-green-400">⚽ WC26</span>
+                  <ThemeToggle />
+                </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <a href="/profile" className="text-sm text-gray-500 hover:text-gray-900 truncate max-w-24 sm:max-w-none">{profile?.username}</a>
                   <form action={logout} className="shrink-0">
