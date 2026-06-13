@@ -105,8 +105,12 @@ export async function fetchTodayMatches(): Promise<FDMatch[]> {
 }
 
 // Fetches ALL WC matches in one request — used by the backfill endpoint to
-// populate match_events for already-completed matches the regular sync missed.
-// The API returns every match across the whole tournament with goals included.
+// learn each match's football-data id, status and score so it knows which
+// matches to pull full detail for.
+//
+// IMPORTANT: the competition-matches LIST endpoint does NOT include the goals
+// array — goal scorers are only on the single-match endpoint (fetchMatchById).
+// This call is purely for discovery; goals come from per-match detail fetches.
 export async function fetchAllWCMatches(): Promise<FDMatch[]> {
   const key = process.env.FOOTBALL_DATA_KEY
   if (!key) throw new Error('FOOTBALL_DATA_KEY env var is not set')
@@ -133,6 +137,35 @@ export async function fetchAllWCMatches(): Promise<FDMatch[]> {
   return (json.matches ?? []) as FDMatch[]
 }
 
+// Fetches a single match by its football-data id. This is the ONLY endpoint
+// that returns the goals array (scorer, assist, minute, type). Used by both
+// the backfill and the live sync to populate match_events.
+export async function fetchMatchById(fdId: number): Promise<FDMatch> {
+  const key = process.env.FOOTBALL_DATA_KEY
+  if (!key) throw new Error('FOOTBALL_DATA_KEY env var is not set')
+
+  const url = `https://api.football-data.org/v4/matches/${fdId}`
+
+  const res = await fetch(url, {
+    headers: { 'X-Auth-Token': key },
+    cache: 'no-store',
+    signal: AbortSignal.timeout(10_000),
+  })
+
+  if (!res.ok) {
+    const body = (await res.text()).slice(0, 300)
+    throw new Error(`football-data.org ${res.status}: ${body}`)
+  }
+
+  const json = await res.json()
+
+  if (json.errorCode) {
+    throw new Error(`football-data.org error ${json.errorCode}: ${String(json.message).slice(0, 200)}`)
+  }
+
+  return json as FDMatch
+}
+
 // Convert an FDGoal into the shape stored in match_events, given the home/away
 // team names from the same API response (both still in FD format — no need to
 // normalise because the comparison is within the same response object).
@@ -144,4 +177,30 @@ export function mapGoalType(fdType: FDGoal['type']): 'goal' | 'own_goal' | 'pena
   if (fdType === 'OWN_GOAL') return 'own_goal'
   if (fdType === 'PENALTY')  return 'penalty'
   return 'goal'
+}
+
+export interface MatchEventRow {
+  match_id: number
+  minute: number | null
+  extra_time: number | null
+  type: 'goal' | 'own_goal' | 'penalty'
+  team: 'home' | 'away'
+  player_name: string
+  assist_name: string | null
+}
+
+// Maps the goals array from a single-match detail response to match_events rows.
+// `detail` must come from fetchMatchById (the list endpoint has no goals).
+export function goalsToEventRows(detail: FDMatch, matchId: number): MatchEventRow[] {
+  return (detail.goals ?? [])
+    .filter(g => g.scorer?.name)
+    .map(g => ({
+      match_id:    matchId,
+      minute:      g.minute ?? null,
+      extra_time:  g.injuryTime ?? null,
+      type:        mapGoalType(g.type),
+      team:        mapGoalTeam(g, detail.homeTeam.name),
+      player_name: g.scorer!.name,
+      assist_name: g.assist?.name ?? null,
+    }))
 }
