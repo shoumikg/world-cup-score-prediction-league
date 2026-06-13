@@ -2,10 +2,9 @@
 
 import { useState, useTransition, useRef, useEffect } from 'react'
 import { savePrediction } from '@/app/actions'
-import { stageLabel, scoreColor, scoreOutcome, type Outcome } from '@/lib/scoring'
+import { stageLabel, scoreColor } from '@/lib/scoring'
 import { teamDisplay } from '@/lib/flags'
 import { kickoffTimerDelay, predictionDeadlineUTC } from '@/lib/time'
-import { teamFlag } from '@/lib/flags'
 import type { Match, Prediction, PickEntry } from '@/lib/types'
 
 interface Props {
@@ -13,10 +12,9 @@ interface Props {
   prediction: Prediction | undefined
   isLocked: boolean
   picks?: PickEntry[]
-  totalPlayers?: number
 }
 
-export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: Props) {
+export function MatchRow({ match, prediction, isLocked, picks }: Props) {
   const homeName = teamDisplay(match.home_team, match.home_source ?? 'TBD')
   const awayName = teamDisplay(match.away_team, match.away_source ?? 'TBD')
   const isPlaceholder = !match.home_team
@@ -92,22 +90,6 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
           updated_at: '',
         }
       : undefined)
-
-  const predictedCount = picks?.filter(p => p.prediction !== null).length ?? 0
-
-  // Once a result is in, order everyone's picks best-first (mini leaderboard
-  // for the match); before that, keep the server's alphabetical order.
-  const OUTCOME_RANK: Record<Outcome, number> = { exact: 0, correct_gd: 1, correct: 2, wrong: 3 }
-  const entryRank = (e: PickEntry) =>
-    e.prediction
-      ? OUTCOME_RANK[scoreOutcome(
-          { user_id: '', match_id: match.id, home_pred: e.prediction.homePred, away_pred: e.prediction.awayPred, updated_at: '' },
-          match
-        )!]
-      : 4 // no pick sorts last
-  const displayedPicks = picks && hasResult
-    ? [...picks].sort((a, b) => entryRank(a) - entryRank(b) || a.displayName.localeCompare(b.displayName))
-    : picks
 
   // Score chip — appearance depends on match status. Rendered in two spots:
   // beside the stage badge on mobile, between venue and prediction on sm+.
@@ -249,50 +231,6 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
         )
       })()}
 
-      {/* Everyone's picks — visible after deadline */}
-      {locked && picks && (
-        <details className="mt-2 pt-2 border-t relative z-10">
-          <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none py-1">
-            Everyone's picks ({predictedCount}{totalPlayers ? ` of ${totalPlayers}` : ''})
-          </summary>
-          <div className="mt-2 pb-1">
-            {displayedPicks!.map((entry, i) => (
-              <div key={i} className={`flex items-center gap-2 px-2 py-1.5 rounded ${
-                entry.isSelf ? 'bg-green-50' : 'odd:bg-gray-50'
-              }`}>
-                <span className={`text-xs min-w-0 flex-1 truncate ${
-                  entry.isSelf ? 'text-green-900 font-semibold' : 'text-gray-600'
-                }`}>
-                  {teamFlag(entry.favoriteTeam) && (
-                    <span className="mr-1">{teamFlag(entry.favoriteTeam)}</span>
-                  )}
-                  {entry.displayName}
-                </span>
-                {entry.prediction !== null ? (
-                  <span className={`text-xs font-semibold px-1.5 py-0.5 rounded shrink-0 ${
-                    hasResult
-                      ? scoreColor(
-                          {
-                            user_id: '',
-                            match_id: match.id,
-                            home_pred: entry.prediction.homePred,
-                            away_pred: entry.prediction.awayPred,
-                            updated_at: '',
-                          },
-                          match
-                        )
-                      : 'bg-gray-100 text-gray-700'
-                  }`}>
-                    {entry.prediction.homePred}–{entry.prediction.awayPred}
-                  </span>
-                ) : (
-                  <span className="text-xs text-gray-300 italic shrink-0">no pick</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
     </div>
   )
 }

@@ -129,7 +129,6 @@ export default async function SchedulePage(props: {
                       prediction={predMap.get(m.id)}
                       isLocked={isDeadlinePassed(m.kickoff_utc)}
                       picks={picks}
-                      totalPlayers={totalPlayers}
                     />
                   </div>
                 )
