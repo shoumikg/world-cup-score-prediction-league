@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { fetchTodayMatches, normalizeTeamName, mapStatus, mapGoalTeam, mapGoalType } from '@/lib/football-data'
+import { fetchTodayMatches, normalizeTeamName, mapStatus, fetchMatchById, goalsToEventRows } from '@/lib/football-data'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -133,36 +133,38 @@ export async function GET(req: NextRequest) {
     if (error) errors.push(`match ${u.id}: ${error.message}`)
   }
 
-  // ── 9. Sync goal events for matches with goal data ─────────────────────────
-  // Refresh events whenever the feed provides goals — keeps the table current
-  // during live matches and correct immediately at full time.
+  // ── 9. Sync goal events for active matches ─────────────────────────────────
+  // The competition list response carries scores but NOT the goals array, so we
+  // fetch per-match detail for each active fixture. Only matches with at least
+  // one open-play goal are fetched, bounding the extra API calls (the live
+  // window rarely holds more than a handful of matches; well under 10 req/min).
+  let eventsUpdated = 0
   for (const u of updates) {
-    const goals = u.fdMatch.goals
-    if (!goals || goals.length === 0) continue
+    if (u.home_score + u.away_score <= 0) continue // no open-play goals yet
+
+    let detail
+    try {
+      detail = await fetchMatchById(u.fdMatch.id)
+    } catch (err) {
+      errors.push(`events fetch match ${u.id}: ${String(err)}`)
+      continue
+    }
+
+    const rows = goalsToEventRows(detail, u.id)
 
     await db.from('match_events').delete().eq('match_id', u.id)
-
-    const rows = goals
-      .filter(g => g.scorer?.name)
-      .map(g => ({
-        match_id:    u.id,
-        minute:      g.minute ?? null,
-        extra_time:  g.injuryTime ?? null,
-        type:        mapGoalType(g.type),
-        team:        mapGoalTeam(g, u.fdMatch.homeTeam.name),
-        player_name: g.scorer!.name,
-        assist_name: g.assist?.name ?? null,
-      }))
 
     if (rows.length > 0) {
       const { error: insErr } = await db.from('match_events').insert(rows)
       if (insErr) errors.push(`events match ${u.id}: ${insErr.message}`)
+      else eventsUpdated += rows.length
     }
   }
 
   return NextResponse.json({
     updated: updates.length,
-    ...(errors.length    && { errors }),
+    ...(eventsUpdated   && { eventsUpdated }),
+    ...(errors.length   && { errors }),
     ...(unmatched.length && { unmatched }),
   })
 }
