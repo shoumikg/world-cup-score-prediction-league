@@ -7,6 +7,7 @@ import { validateFeedback } from '@/lib/feedback'
 import { validateDisplayName, validateFavoriteTeam } from '@/lib/profile'
 import { predictionDeadlineUTC } from '@/lib/time'
 import { validateBonusAnswer, validateBonusGrade } from '@/lib/bonus'
+import { LATEST_CHANGELOG_ID } from '@/lib/changelog'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
@@ -203,6 +204,21 @@ export async function saveBonusAnswer(
 
   revalidatePath('/bonus')
   return {}
+}
+
+// ── What's New ────────────────────────────────────────────────
+
+export async function markWhatsNewSeen(): Promise<void> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
+
+  await supabase.from('whats_new_reads').upsert(
+    { user_id: user.id, seen_id: LATEST_CHANGELOG_ID, updated_at: new Date().toISOString() },
+    { onConflict: 'user_id' }
+  )
+
+  revalidatePath('/', 'layout')
 }
 
 // ── Admin ─────────────────────────────────────────────────────
