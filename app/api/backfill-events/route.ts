@@ -1,21 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import {
-  fetchAllWCMatches,
-  fetchMatchById,
-  normalizeTeamName,
-  goalsToEventRows,
-} from '@/lib/football-data'
+  fetchWorldCupData,
+  normalizeOFTeamName,
+  buildEventRows,
+  type OFMatch,
+} from '@/lib/openfootball'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-// football-data.org free tier allows 10 requests/minute. One request goes to
-// the competition list; the rest are per-match detail fetches. We cap the
-// per-invocation detail fetches so a single call never trips the limit. Re-run
-// the endpoint (waiting ~1 min between runs) until "remaining" reaches 0.
-const MAX_DETAIL_FETCHES = 8
-
+// Syncs goal scorers into match_events from openfootball/worldcup.json. The
+// whole tournament arrives in ONE request with no rate limit, so a single call
+// refreshes every match (idempotent: delete-then-insert per match). Safe to run
+// on a schedule (e.g. every ~10 min) to pick up newly-finished matches — goal
+// scorers are not the same as live scores (those come from /api/sync-scores).
 export async function GET(req: NextRequest) {
   // ── 1. Auth ────────────────────────────────────────────────────────────────
   const secret = process.env.CRON_SECRET
@@ -24,7 +23,6 @@ export async function GET(req: NextRequest) {
   }
 
   const debug = req.nextUrl.searchParams.get('debug') === '1'
-
   const db = getAdminClient()
 
   // ── 2. Load our match list ─────────────────────────────────────────────────
@@ -41,111 +39,96 @@ export async function GET(req: NextRequest) {
     away_team: string | null
   }[]
 
-  // ── 3. Build lookup index "HomeTeam|AwayTeam|YYYY-MM-DD" → our match id ─────
-  const index = new Map<string, number>()
+  // ── 3. Index our matches by ordered "home|away" pair ───────────────────────
+  // A given ordered pairing is effectively unique across one World Cup; when it
+  // isn't (a rare knockout rematch), the kickoff date breaks the tie.
+  const index = new Map<string, typeof matches>()
   for (const m of matches) {
     if (!m.home_team || !m.away_team) continue
-    index.set(`${m.home_team}|${m.away_team}|${m.kickoff_utc.slice(0, 10)}`, m.id)
+    const key = `${m.home_team}|${m.away_team}`
+    if (!index.has(key)) index.set(key, [])
+    index.get(key)!.push(m)
   }
 
-  // ── 4. Fetch the competition list (1 API call) to discover fd ids + scores ─
-  let apiMatches
+  // ── 4. Fetch the whole tournament (one request, no key, no rate limit) ─────
+  let data
   try {
-    apiMatches = await fetchAllWCMatches()
+    data = await fetchWorldCupData()
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 502 })
   }
 
-  // ── 5. Which of our matches already have events? (skip those) ──────────────
-  const { data: existingRaw } = await db.from('match_events').select('match_id')
-  const haveEvents = new Set((existingRaw ?? []).map(r => (r as { match_id: number }).match_id))
-
-  // ── 6. Determine candidates: matched to our DB, have open-play goals, no
-  //       events yet. The list score tells us whether any goals exist at all,
-  //       so 0-0 matches are never candidates and the loop terminates. ────────
-  const candidates: { ourId: number; fdId: number }[] = []
-  const unmatched: string[] = []
-
-  for (const f of apiMatches) {
-    const home = normalizeTeamName(f.homeTeam?.name ?? '')
-    const away = normalizeTeamName(f.awayTeam?.name ?? '')
-    if (!home || !away) continue
-
-    const date = f.utcDate.slice(0, 10)
-    const ourId = index.get(`${home}|${away}|${date}`)
-    if (ourId === undefined) {
-      // Only log finished/in-play fixtures as unmatched — scheduled ones are
-      // expected to be absent (knockout placeholders not yet filled in).
-      const hs = f.score.fullTime.home
-      const as = f.score.fullTime.away
-      if (hs !== null && as !== null) unmatched.push(`${home} vs ${away} (${date})`)
-      continue
+  function resolveOurId(f: OFMatch): number | undefined {
+    const home = normalizeOFTeamName(f.team1)
+    const away = normalizeOFTeamName(f.team2)
+    const candidates = index.get(`${home}|${away}`)
+    if (!candidates || candidates.length === 0) return undefined
+    if (candidates.length === 1) return candidates[0].id
+    // Multiple matches with the same pairing — disambiguate by date (±1 day).
+    if (f.date) {
+      const target = Date.parse(f.date)
+      const within = candidates.find(
+        m => Math.abs(Date.parse(m.kickoff_utc.slice(0, 10)) - target) <= 86_400_000
+      )
+      if (within) return within.id
     }
-
-    if (haveEvents.has(ourId)) continue
-
-    const hs = f.score.fullTime.home ?? 0
-    const as = f.score.fullTime.away ?? 0
-    if (hs + as <= 0) continue // no open-play goals to fetch
-
-    candidates.push({ ourId, fdId: f.id })
+    return candidates[0].id
   }
 
-  // ── 7. Debug mode: return raw API detail for first candidate ──────────────
+  // A match has open-play goals if either goals array is non-empty.
+  const scored = data.matches.filter(
+    f => (f.goals1?.length ?? 0) + (f.goals2?.length ?? 0) > 0
+  )
+
+  // ── Debug: show the first scored match's mapping + parsed rows ─────────────
   if (debug) {
-    if (candidates.length === 0) {
-      return NextResponse.json({ debug: true, message: 'No candidates found', unmatched })
-    }
-    const c = candidates[0]
-    let raw
-    try {
-      raw = await fetchMatchById(c.fdId)
-    } catch (err) {
-      return NextResponse.json({ debug: true, error: String(err) }, { status: 502 })
-    }
-    return NextResponse.json({ debug: true, ourMatchId: c.ourId, fdMatchId: c.fdId, raw })
+    const f = scored[0]
+    if (!f) return NextResponse.json({ debug: true, message: 'No scored matches in dataset' })
+    const ourId = resolveOurId(f)
+    return NextResponse.json({
+      debug: true,
+      openfootball: { team1: f.team1, team2: f.team2, date: f.date, goals1: f.goals1, goals2: f.goals2 },
+      resolvedOurMatchId: ourId ?? null,
+      rows: ourId ? buildEventRows(f, ourId) : [],
+    })
   }
 
-  // ── 8. Fetch detail for up to MAX_DETAIL_FETCHES candidates ────────────────
-  const batch = candidates.slice(0, MAX_DETAIL_FETCHES)
+  // ── 5. Upsert events for each scored, matched fixture ──────────────────────
   let processed = 0
   let totalEvents = 0
   const errors: string[] = []
+  const unmatched: string[] = []
 
-  for (const c of batch) {
-    let detail
-    try {
-      detail = await fetchMatchById(c.fdId)
-    } catch (err) {
-      errors.push(`fetch fd ${c.fdId}: ${String(err)}`)
+  for (const f of scored) {
+    const ourId = resolveOurId(f)
+    if (ourId === undefined) {
+      unmatched.push(`${f.team1} vs ${f.team2}${f.date ? ` (${f.date})` : ''}`)
       continue
     }
 
-    const rows = goalsToEventRows(detail, c.ourId)
+    const rows = buildEventRows(f, ourId)
 
-    // Delete-then-insert keeps it idempotent if a match is re-processed.
-    const { error: delErr } = await db.from('match_events').delete().eq('match_id', c.ourId)
+    // Delete-then-insert keeps it idempotent across re-runs.
+    const { error: delErr } = await db.from('match_events').delete().eq('match_id', ourId)
     if (delErr) {
-      errors.push(`delete match ${c.ourId}: ${delErr.message}`)
+      errors.push(`delete match ${ourId}: ${delErr.message}`)
       continue
     }
 
     if (rows.length > 0) {
       const { error: insErr } = await db.from('match_events').insert(rows)
       if (insErr) {
-        errors.push(`insert match ${c.ourId}: ${insErr.message}`)
+        errors.push(`insert match ${ourId}: ${insErr.message}`)
         continue
       }
       totalEvents += rows.length
     }
-
     processed++
   }
 
   return NextResponse.json({
     processed,
     totalEvents,
-    remaining: Math.max(0, candidates.length - batch.length),
     ...(errors.length    && { errors }),
     ...(unmatched.length && { unmatched }),
   })
