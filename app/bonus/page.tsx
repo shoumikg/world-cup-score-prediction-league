@@ -168,6 +168,27 @@ function BonusGuide() {
           <strong>Seeing others' picks</strong> — Once the deadline passes, expand{' '}
           <strong>Everyone's picks</strong> under any question to see all submissions.
         </p>
+        <div>
+          <strong>Status badges</strong> — Each pick shows a coloured badge after the deadline:
+          <ul className="mt-1.5 space-y-1 text-sm">
+            <li className="flex items-center gap-2">
+              <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700 shrink-0">● Leading</span>
+              <span>Group stage still in progress — your pick is among the current leader(s). On track, not final yet.</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 shrink-0">✓ Correct</span>
+              <span>Group stage complete — your pick is among the final leader(s). You earned the 25 pts.</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600 shrink-0">✗ Behind</span>
+              <span>Your pick is not among the current (or final) leader(s).</span>
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 shrink-0">⏳ Pending</span>
+              <span>Q1 only — your text entry hasn't been mapped to a squad player yet.</span>
+            </li>
+          </ul>
+        </div>
         <p className="text-xs text-gray-500 bg-gray-50 border rounded px-3 py-2">
           More bonus questions covering the knockout stages will appear here once the
           group stage is complete. Those questions will be worth <strong>30 pts</strong> each.

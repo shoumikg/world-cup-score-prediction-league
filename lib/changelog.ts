@@ -28,6 +28,16 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
       'New Bracket page showing the full knockout draw.',
     ],
   },
+  {
+    id: 3,
+    date: '2026-06-13',
+    title: 'Live bonus tracker & auto-scoring',
+    items: [
+      'Bonus questions now score automatically from live match data — no manual grading needed for Q2 and Q3.',
+      'Q1 now shows the admin-confirmed player name instead of raw typed text.',
+      'Live tracker on the Bonus page shows current leaders and each participant\'s pick status (Leading, Correct, Behind, or Pending).',
+    ],
+  },
 ]
 
 export const LATEST_CHANGELOG_ID = Math.max(0, ...CHANGELOG.map(e => e.id))
