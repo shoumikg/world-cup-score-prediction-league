@@ -3,9 +3,11 @@ import { istDateKey, formatDateIST, formatKickoffIST, isKickedOff, isDeadlinePas
 import { computeGroupStandings } from '@/lib/standings'
 import { MatchRow } from '@/app/MatchRow'
 import { GroupTable } from '@/app/GroupTable'
+import { SquadSection } from '@/app/SquadSection'
 import { DeadlineCountdown } from '@/app/DeadlineCountdown'
 import { LiveRefresh } from '@/app/LiveRefresh'
 import { teamFlag } from '@/lib/flags'
+import { fetchSquads, findSquad } from '@/lib/openfootball'
 import type { Match, Prediction, PickEntry } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -20,11 +22,16 @@ export default async function SchedulePage(props: {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null // middleware will redirect
 
-  const [{ data: matches }, { data: allPreds }, { data: profiles }] = await Promise.all([
+  const [{ data: matches }, { data: allPreds }, { data: profiles }, squads] = await Promise.all([
     supabase.from('matches').select('*').order('kickoff_utc'),
     supabase.from('predictions').select('*'), // RLS: own always + others' after deadline
     supabase.from('profiles').select('id, display_name, favorite_team'),
+    // Squads only needed when filtering by team; silently null on error so the
+    // rest of the page never fails because of the openfootball CDN.
+    teamFilter ? fetchSquads().catch(() => null) : Promise.resolve(null),
   ])
+
+  const teamSquad = teamFilter && squads ? findSquad(squads, teamFilter) : null
 
   type ProfileRow = { id: string; display_name: string; favorite_team: string | null }
   const profileList = (profiles ?? []) as ProfileRow[]
@@ -105,6 +112,10 @@ export default async function SchedulePage(props: {
             groupPageLink
           />
         </div>
+      )}
+
+      {teamFilter && teamSquad && (
+        <SquadSection players={teamSquad.players} />
       )}
 
       <div className="mb-4 text-xs text-gray-400 flex gap-4 flex-wrap">

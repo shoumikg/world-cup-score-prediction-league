@@ -273,7 +273,8 @@ export async function saveKnockoutTeams(
 export async function saveBonusGrade(
   targetUserId: string,
   questionId: number,
-  isCorrect: boolean
+  isCorrect: boolean,
+  confirmedAnswer?: string | null
 ): Promise<{ error?: string }> {
   const validated = validateBonusGrade(questionId, isCorrect, targetUserId)
   if ('error' in validated) return { error: validated.error }
@@ -295,6 +296,7 @@ export async function saveBonusGrade(
       user_id: validated.targetUserId,
       question_id: validated.questionId,
       is_correct: validated.isCorrect,
+      confirmed_answer: confirmedAnswer ?? null,
       graded_at: new Date().toISOString(),
     },
     { onConflict: 'user_id,question_id' }
