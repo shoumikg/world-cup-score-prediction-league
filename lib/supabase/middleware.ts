@@ -31,8 +31,8 @@ export async function updateSession(request: NextRequest) {
   const isAdminPath = request.nextUrl.pathname.startsWith('/admin')
   // Exact-match allowlist, NOT a blanket /api/* exemption: any future API
   // route stays behind the auth wall by default unless added here with its
-  // own auth story. /api/sync-scores does its own CRON_SECRET Bearer check.
-  const isPublicApi = request.nextUrl.pathname === '/api/sync-scores'
+  // own auth story. Both endpoints do their own CRON_SECRET Bearer check.
+  const isPublicApi = ['/api/sync-scores', '/api/backfill-events'].includes(request.nextUrl.pathname)
 
   if (!user && !isAuthPath && !isPublicApi) {
     const url = request.nextUrl.clone()

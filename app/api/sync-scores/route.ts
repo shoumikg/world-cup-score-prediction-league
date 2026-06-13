@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { fetchTodayMatches, normalizeTeamName, mapStatus } from '@/lib/football-data'
+import { fetchTodayMatches, normalizeTeamName, mapStatus, mapGoalTeam, mapGoalType } from '@/lib/football-data'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -93,6 +93,7 @@ export async function GET(req: NextRequest) {
     away_score: number
     status: 'live' | 'ft' | 'aet' | 'pen' | null
     live_minute: number | null
+    fdMatch: typeof activeMatches[number]
   }[] = []
   const unmatched: string[] = []
 
@@ -113,6 +114,7 @@ export async function GET(req: NextRequest) {
         status,
         // Minute is only meaningful in play; cleared at FT or when the feed omits it
         live_minute: status === 'live' && typeof f.minute === 'number' ? f.minute : null,
+        fdMatch: f,
       })
     } else {
       // Appears in Vercel function logs and response body for diagnosis.
@@ -129,6 +131,33 @@ export async function GET(req: NextRequest) {
       .update({ home_score: u.home_score, away_score: u.away_score, status: u.status, live_minute: u.live_minute })
       .eq('id', u.id)
     if (error) errors.push(`match ${u.id}: ${error.message}`)
+  }
+
+  // ── 9. Sync goal events for matches with goal data ─────────────────────────
+  // Refresh events whenever the feed provides goals — keeps the table current
+  // during live matches and correct immediately at full time.
+  for (const u of updates) {
+    const goals = u.fdMatch.goals
+    if (!goals || goals.length === 0) continue
+
+    await db.from('match_events').delete().eq('match_id', u.id)
+
+    const rows = goals
+      .filter(g => g.scorer?.name)
+      .map(g => ({
+        match_id:    u.id,
+        minute:      g.minute ?? null,
+        extra_time:  g.injuryTime ?? null,
+        type:        mapGoalType(g.type),
+        team:        mapGoalTeam(g, u.fdMatch.homeTeam.name),
+        player_name: g.scorer!.name,
+        assist_name: g.assist?.name ?? null,
+      }))
+
+    if (rows.length > 0) {
+      const { error: insErr } = await db.from('match_events').insert(rows)
+      if (insErr) errors.push(`events match ${u.id}: ${insErr.message}`)
+    }
   }
 
   return NextResponse.json({
