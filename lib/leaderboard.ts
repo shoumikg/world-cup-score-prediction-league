@@ -68,9 +68,11 @@ export function computeLeaderboard(
     row[outcome] += 1
     row.scored += 1
     row.points += matchPoints(outcome, match.stage)
-    const fa = formAccum.get(pred.user_id) ?? []
-    fa.push({ kickoff: match.kickoff_utc, outcome })
-    formAccum.set(pred.user_id, fa)
+    if (match.status !== 'live') {
+      const fa = formAccum.get(pred.user_id) ?? []
+      fa.push({ kickoff: match.kickoff_utc, outcome })
+      formAccum.set(pred.user_id, fa)
+    }
   }
 
   for (const g of bonusGrades) {
