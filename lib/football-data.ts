@@ -46,6 +46,15 @@ export function mapStatus(
 
 // ---------------------------------------------------------------------------
 
+export interface FDGoal {
+  minute: number | null
+  injuryTime: number | null
+  type: 'REGULAR' | 'OWN_GOAL' | 'PENALTY'
+  team: { id: number; name: string } | null
+  scorer: { id: number; name: string } | null
+  assist: { id: number; name: string } | null
+}
+
 export interface FDMatch {
   id: number
   utcDate: string            // ISO 8601 kickoff UTC
@@ -60,6 +69,7 @@ export interface FDMatch {
       away: number | null
     }
   }
+  goals?: FDGoal[]
 }
 
 // Fetches WC matches for yesterday + today UTC in a single request.
@@ -92,4 +102,46 @@ export async function fetchTodayMatches(): Promise<FDMatch[]> {
   }
 
   return (json.matches ?? []) as FDMatch[]
+}
+
+// Fetches ALL WC matches in one request — used by the backfill endpoint to
+// populate match_events for already-completed matches the regular sync missed.
+// The API returns every match across the whole tournament with goals included.
+export async function fetchAllWCMatches(): Promise<FDMatch[]> {
+  const key = process.env.FOOTBALL_DATA_KEY
+  if (!key) throw new Error('FOOTBALL_DATA_KEY env var is not set')
+
+  const url = 'https://api.football-data.org/v4/competitions/WC/matches'
+
+  const res = await fetch(url, {
+    headers: { 'X-Auth-Token': key },
+    cache: 'no-store',
+    signal: AbortSignal.timeout(15_000),
+  })
+
+  if (!res.ok) {
+    const body = (await res.text()).slice(0, 300)
+    throw new Error(`football-data.org ${res.status}: ${body}`)
+  }
+
+  const json = await res.json()
+
+  if (json.errorCode) {
+    throw new Error(`football-data.org error ${json.errorCode}: ${String(json.message).slice(0, 200)}`)
+  }
+
+  return (json.matches ?? []) as FDMatch[]
+}
+
+// Convert an FDGoal into the shape stored in match_events, given the home/away
+// team names from the same API response (both still in FD format — no need to
+// normalise because the comparison is within the same response object).
+export function mapGoalTeam(goal: FDGoal, homeTeamName: string): 'home' | 'away' {
+  return goal.team?.name === homeTeamName ? 'home' : 'away'
+}
+
+export function mapGoalType(fdType: FDGoal['type']): 'goal' | 'own_goal' | 'penalty' {
+  if (fdType === 'OWN_GOAL') return 'own_goal'
+  if (fdType === 'PENALTY')  return 'penalty'
+  return 'goal'
 }

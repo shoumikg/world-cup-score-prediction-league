@@ -4,9 +4,24 @@ import { formatKickoffIST, isDeadlinePassed, predictionDeadlineUTC } from '@/lib
 import { teamDisplay, teamFlag } from '@/lib/flags'
 import { scoreColor, scoreOutcome, stageLabel, OUTCOME_CLASSES } from '@/lib/scoring'
 import { DeadlineCountdown } from '@/app/DeadlineCountdown'
-import type { Match, Prediction, PickEntry } from '@/lib/types'
+import type { Match, Prediction, PickEntry, MatchEvent } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
+
+function GoalLine({ event: e }: { event: MatchEvent }) {
+  const minuteStr = e.minute != null
+    ? `${e.minute}${e.extra_time != null ? `+${e.extra_time}` : ''}'`
+    : '–'
+  return (
+    <div className="text-sm leading-snug">
+      <span className="text-xs text-gray-400 inline-block w-9 tabular-nums shrink-0">{minuteStr}</span>
+      <span className="font-medium">{e.player_name}</span>
+      {e.type === 'own_goal' && <span className="text-xs text-red-400 ml-1">(og)</span>}
+      {e.type === 'penalty'  && <span className="text-xs text-gray-400 ml-1">(pen)</span>}
+      {e.assist_name && <span className="text-xs text-gray-400 ml-1">· {e.assist_name}</span>}
+    </div>
+  )
+}
 
 export default async function MatchPage(props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params
@@ -17,10 +32,11 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const [{ data: matchRaw }, { data: predsRaw }, { data: profilesRaw }] = await Promise.all([
+  const [{ data: matchRaw }, { data: predsRaw }, { data: profilesRaw }, { data: eventsRaw }] = await Promise.all([
     supabase.from('matches').select('*').eq('id', matchId).single(),
     supabase.from('predictions').select('*').eq('match_id', matchId),
     supabase.from('profiles').select('id, display_name, favorite_team'),
+    supabase.from('match_events').select('*').eq('match_id', matchId).order('minute').order('extra_time'),
   ])
 
   if (!matchRaw) notFound()
@@ -29,6 +45,7 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
   const preds = (predsRaw ?? []) as Prediction[]
   type ProfileRow = { id: string; display_name: string; favorite_team: string | null }
   const profiles = (profilesRaw ?? []) as ProfileRow[]
+  const events = (eventsRaw ?? []) as MatchEvent[]
 
   const deadlinePassed = isDeadlinePassed(match.kickoff_utc)
   const deadline = predictionDeadlineUTC(match.kickoff_utc)
@@ -146,6 +163,41 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
           )}
         </div>
       </div>
+
+      {/* Goal scorers — shown as soon as events exist */}
+      {events.length > 0 && (
+        <div className="bg-white rounded-xl border shadow-sm p-4 mb-4">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Goal scorers</p>
+          <div className="flex gap-4">
+            {/* Home goals */}
+            <div className="flex-1">
+              <p className="text-xs text-gray-400 mb-2 truncate font-medium">{match.home_team ?? 'Home'}</p>
+              <div className="space-y-1.5">
+                {events.filter(e => e.team === 'home').length > 0
+                  ? events.filter(e => e.team === 'home').map(e => (
+                      <GoalLine key={e.id} event={e} />
+                    ))
+                  : <span className="text-xs text-gray-300 italic">–</span>
+                }
+              </div>
+            </div>
+            {/* Divider */}
+            <div className="w-px bg-gray-100 shrink-0" />
+            {/* Away goals */}
+            <div className="flex-1">
+              <p className="text-xs text-gray-400 mb-2 truncate font-medium">{match.away_team ?? 'Away'}</p>
+              <div className="space-y-1.5">
+                {events.filter(e => e.team === 'away').length > 0
+                  ? events.filter(e => e.team === 'away').map(e => (
+                      <GoalLine key={e.id} event={e} />
+                    ))
+                  : <span className="text-xs text-gray-300 italic">–</span>
+                }
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Post-deadline sections */}
       {deadlinePassed && (

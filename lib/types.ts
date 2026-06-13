@@ -60,3 +60,14 @@ export interface BonusGrade {
   is_correct: boolean
   graded_at: string
 }
+
+export interface MatchEvent {
+  id: number
+  match_id: number
+  minute: number | null
+  extra_time: number | null
+  type: 'goal' | 'own_goal' | 'penalty'
+  team: 'home' | 'away'
+  player_name: string
+  assist_name: string | null
+}
