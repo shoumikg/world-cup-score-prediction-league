@@ -20,8 +20,6 @@ export default async function AdminPendingPage() {
 
   if (!profile?.is_admin) redirect('/')
 
-  const todayKey = istDateKey(new Date().toISOString())
-
   const [{ data: matches }, { data: preds }, { data: profiles }] = await Promise.all([
     supabase.from('matches').select('*').order('kickoff_utc'),
     supabase.from('predictions').select('user_id, match_id, home_pred, away_pred'),
@@ -31,23 +29,37 @@ export default async function AdminPendingPage() {
       .order('display_name'),
   ])
 
-  const todayMatches = ((matches ?? []) as Match[]).filter(
-    m => istDateKey(m.kickoff_utc) === todayKey
-  )
+  const allMatches = (matches ?? []) as Match[]
+
+  // Group matches by IST calendar day (= shared deadline)
+  const byDeadline = new Map<string, { deadline: Date; matches: Match[] }>()
+  for (const m of allMatches) {
+    const key = istDateKey(m.kickoff_utc)
+    if (!byDeadline.has(key)) {
+      byDeadline.set(key, { deadline: predictionDeadlineUTC(m.kickoff_utc), matches: [] })
+    }
+    byDeadline.get(key)!.matches.push(m)
+  }
+
+  // Find the immediate next upcoming deadline; fall back to the most recently closed one
+  const now = new Date()
+  const sorted = [...byDeadline.values()].sort((a, b) => a.deadline.getTime() - b.deadline.getTime())
+  const targetGroup = sorted.find(g => g.deadline > now) ?? sorted.at(-1) ?? null
+  const targetMatches = targetGroup?.matches ?? []
 
   type PlayerRow = { id: string; display_name: string; favorite_team: string | null }
   const players = (profiles ?? []) as PlayerRow[]
 
-  if (todayMatches.length === 0) {
+  if (targetMatches.length === 0) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-6">
         <h1 className="text-xl font-bold mb-1">Pending Predictions</h1>
-        <p className="text-sm text-gray-500">No matches scheduled for today (IST).</p>
+        <p className="text-sm text-gray-500">No matches found.</p>
       </div>
     )
   }
 
-  const deadline = predictionDeadlineUTC(todayMatches[0].kickoff_utc)
+  const deadline = predictionDeadlineUTC(targetMatches[0].kickoff_utc)
   const deadlinePassed = deadline <= new Date()
 
   // predMap is populated by RLS: own rows always + others only after deadline
@@ -58,7 +70,7 @@ export default async function AdminPendingPage() {
 
   // How many non-admin players predicted every single match today
   const fullyPredicted = deadlinePassed
-    ? players.filter(p => todayMatches.every(m => predMap.has(`${m.id}:${p.id}`))).length
+    ? players.filter(p => targetMatches.every(m => predMap.has(`${m.id}:${p.id}`))).length
     : null
 
   return (
@@ -67,7 +79,7 @@ export default async function AdminPendingPage() {
         <h1 className="text-xl font-bold mb-1">Pending Predictions</h1>
         <p className="text-sm text-gray-500">
           {deadlinePassed
-            ? `Deadline closed · ${fullyPredicted} of ${players.length} players predicted all matches today`
+            ? `Deadline closed · ${fullyPredicted} of ${players.length} players predicted all matches`
             : `Deadline ${formatKickoffIST(deadline.toISOString())} IST — predictions hidden until deadline passes`}
         </p>
       </div>
@@ -80,7 +92,7 @@ export default async function AdminPendingPage() {
         </div>
       )}
 
-      {todayMatches.map(m => {
+      {targetMatches.map(m => {
         const home = teamDisplay(m.home_team, m.home_source ?? 'TBD')
         const away = teamDisplay(m.away_team, m.away_source ?? 'TBD')
 
