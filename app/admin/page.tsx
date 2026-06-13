@@ -3,10 +3,13 @@ import { createClient } from '@/lib/supabase/server'
 import { formatKickoffIST, isKickedOff, predictionDeadlineUTC } from '@/lib/time'
 import { teamDisplay, teamFlag } from '@/lib/flags'
 import { GROUP_BONUS_QUESTIONS } from '@/lib/bonus'
+import { fetchSquads, normalizeOFTeamName } from '@/lib/openfootball'
 import { AdminResultForm } from './AdminResultForm'
 import { AdminKnockoutForm } from './AdminKnockoutForm'
 import { AdminBonusGradeForm } from './AdminBonusGradeForm'
+import { AdminQ1GradeForm } from './AdminQ1GradeForm'
 import type { Match, BonusAnswer, BonusGrade } from '@/lib/types'
+import type { OFPlayer } from '@/lib/openfootball'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,12 +32,22 @@ export default async function AdminPage() {
     { data: bonusAnswers },
     { data: bonusGrades },
     { data: profiles },
+    squads,
   ] = await Promise.all([
     supabase.from('matches').select('*').order('kickoff_utc'),
     supabase.from('bonus_answers').select('*'),
     supabase.from('bonus_grades').select('*'),
     supabase.from('profiles').select('id, display_name, favorite_team'),
+    fetchSquads().catch(() => null),
   ])
+
+  // Build a map from DB team name → squad players for Q1 grading
+  const squadMap = new Map<string, OFPlayer[]>()
+  if (squads) {
+    for (const squad of squads) {
+      squadMap.set(normalizeOFTeamName(squad.name), squad.players)
+    }
+  }
 
   const all = (matches ?? []) as Match[]
   const started = all.filter(m => isKickedOff(m.kickoff_utc))
@@ -147,12 +160,36 @@ export default async function AdminPage() {
                         const answerLabel = q.type === 'player'
                           ? `${ans.answer_text} (${teamDisplay(ans.answer_team, ans.answer_team)})`
                           : teamDisplay(ans.answer_team, ans.answer_team)
+                        const playerFlag = teamFlag(p.favorite_team)
+
+                        if (q.type === 'player') {
+                          const squadPlayers = ans.answer_team
+                            ? (squadMap.get(ans.answer_team) ?? null)
+                            : null
+                          return (
+                            <div key={p.id} className="py-3">
+                              <div className="flex items-center gap-x-3 mb-2">
+                                <span className="text-sm text-gray-700 min-w-0 flex-1">
+                                  {playerFlag && <span className="mr-1">{playerFlag}</span>}
+                                  {p.display_name}
+                                </span>
+                                <span className="text-xs text-gray-500 shrink-0">{answerLabel}</span>
+                              </div>
+                              <AdminQ1GradeForm
+                                userId={p.id}
+                                questionId={q.id}
+                                isCorrect={grade?.is_correct ?? null}
+                                confirmedAnswer={grade?.confirmed_answer ?? null}
+                                players={squadPlayers}
+                              />
+                            </div>
+                          )
+                        }
+
                         return (
                           <div key={p.id} className="py-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span className="text-sm text-gray-700 min-w-0 flex-1">
-                              {teamFlag(p.favorite_team) && (
-                                <span className="mr-1">{teamFlag(p.favorite_team)}</span>
-                              )}
+                              {playerFlag && <span className="mr-1">{playerFlag}</span>}
                               {p.display_name}
                             </span>
                             <span className="text-xs text-gray-500 shrink-0">{answerLabel}</span>

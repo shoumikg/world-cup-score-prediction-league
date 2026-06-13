@@ -58,6 +58,7 @@ export interface BonusGrade {
   user_id: string
   question_id: number
   is_correct: boolean
+  confirmed_answer: string | null
   graded_at: string
 }
 
