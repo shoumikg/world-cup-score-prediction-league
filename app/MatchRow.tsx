@@ -110,7 +110,7 @@ export function MatchRow({ match, prediction, isLocked, picks }: Props) {
   )
 
   return (
-    <div className="py-3 border-b last:border-0 relative group">
+    <div className="py-3 border-b last:border-0 relative isolate group">
       {/* Invisible full-row link — team names and interactive controls sit above it via z-10 */}
       <a href={`/match/${match.id}`} className="absolute inset-0" aria-label={`Match ${match.id} detail`} />
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
