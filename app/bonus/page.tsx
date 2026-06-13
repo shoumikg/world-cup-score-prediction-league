@@ -24,7 +24,7 @@ export default async function BonusPage() {
   ] = await Promise.all([
     supabase.from('matches').select('kickoff_utc').eq('stage', 'group').order('kickoff_utc').limit(1),
     supabase.from('bonus_answers').select('*'),
-    supabase.from('profiles').select('id, display_name, favorite_team'),
+    supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
     supabase.from('bonus_grades').select('user_id, question_id, confirmed_answer'),
     supabase.from('match_events').select('*'),
     supabase.from('matches').select('*'),
@@ -40,8 +40,8 @@ export default async function BonusPage() {
   const deadline = predictionDeadlineUTC(firstKickoff)
   const deadlinePassed = deadline <= new Date()
 
-  type ProfileRow = { id: string; display_name: string; favorite_team: string | null }
-  const profileList = (profiles ?? []) as ProfileRow[]
+  type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
+  const profileList = ((profiles ?? []) as ProfileRow[]).filter(p => !p.is_admin)
   const totalPlayers = profileList.length
 
   const answerList = (answers ?? []) as BonusAnswer[]

@@ -23,7 +23,7 @@ export default async function LeaderboardPage() {
     { data: bonusAnswers },
     { data: events },
   ] = await Promise.all([
-    supabase.from('profiles').select('id, display_name, favorite_team'),
+    supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
     supabase.from('matches').select('*'),  // all matches (group-complete check needs unscored too)
     supabase.from('predictions').select('*'),
     supabase.from('bonus_grades').select('user_id, question_id, confirmed_answer'),
@@ -47,16 +47,18 @@ export default async function LeaderboardPage() {
   const allMatches = (matches ?? []) as Match[]
   const groupComplete = isGroupStageComplete(allMatches)
 
+  type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
+  const playerProfiles = ((profiles ?? []) as ProfileRow[]).filter(p => !p.is_admin)
+
   const rows = computeLeaderboard(
-    (profiles ?? []) as LeaderboardProfile[],
+    playerProfiles,
     (preds ?? []) as Prediction[],
     allMatches,
     derivedGrades
   )
 
   const anyScored = rows.some(r => r.scored > 0 || r.bonusPoints > 0)
-  const allProfiles = (profiles ?? []) as LeaderboardProfile[]
-  const currentUserName = allProfiles.find(p => p.id === user.id)?.display_name ?? ''
+  const currentUserName = playerProfiles.find(p => p.id === user.id)?.display_name ?? ''
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
