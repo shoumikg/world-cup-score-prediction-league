@@ -129,12 +129,14 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
   )
 
   return (
-    <div className="py-3 border-b last:border-0">
+    <div className="py-3 border-b last:border-0 relative group">
+      {/* Invisible full-row link — team names and interactive controls sit above it via z-10 */}
+      <a href={`/match/${match.id}`} className="absolute inset-0" aria-label={`Match ${match.id} detail`} />
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         {/* Match meta + teams: stacked on mobile, inline on sm+ */}
         <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
           <div className="flex items-center gap-2">
-            <a href={`/match/${match.id}`} className="text-xs text-gray-400 hover:text-green-600 w-6 text-right shrink-0">#{match.id}</a>
+            <span className="text-xs text-gray-400 w-6 text-right shrink-0">#{match.id}</span>
             <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${
               match.stage === 'group'
                 ? 'bg-blue-100 text-blue-700'
@@ -146,9 +148,24 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
             <span className="ml-auto sm:hidden">{scoreChip}</span>
           </div>
 
-          {/* Full team names — wrap instead of truncating */}
-          <span className={`text-sm font-medium sm:min-w-0 ${isPlaceholder ? 'text-gray-400 italic' : ''}`}>
-            {homeName} <span className="text-xs text-gray-400 font-normal">vs</span> {awayName}
+          {/* Team names — individually linked to filtered schedule, above the row overlay */}
+          <span className="text-sm font-medium sm:min-w-0 relative z-10">
+            {match.home_team ? (
+              <a href={`/?team=${encodeURIComponent(match.home_team)}`}
+                className={`hover:underline ${isPlaceholder ? 'text-gray-400 italic' : ''}`}>
+                {homeName}
+              </a>
+            ) : (
+              <span className="text-gray-400 italic">{homeName}</span>
+            )}
+            {' '}<span className="text-xs text-gray-400 font-normal">vs</span>{' '}
+            {match.away_team ? (
+              <a href={`/?team=${encodeURIComponent(match.away_team)}`} className="hover:underline">
+                {awayName}
+              </a>
+            ) : (
+              <span className="text-gray-400 italic">{awayName}</span>
+            )}
           </span>
         </div>
 
@@ -158,9 +175,8 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
         {/* Desktop: score chip in its usual slot */}
         <span className="hidden sm:block shrink-0">{scoreChip}</span>
 
-        {/* Prediction section — wraps so the saved/error message drops to its
-            own line on narrow screens instead of overflowing */}
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        {/* Prediction section — above row overlay so buttons remain clickable */}
+        <div className="flex flex-wrap items-center gap-2 shrink-0 relative z-10">
           {locked ? (
             <div className="flex items-center gap-1.5">
               {displayPred ? (
@@ -235,7 +251,7 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
 
       {/* Everyone's picks — visible after deadline */}
       {locked && picks && (
-        <details className="mt-2 pt-2 border-t">
+        <details className="mt-2 pt-2 border-t relative z-10">
           <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none py-1">
             Everyone's picks ({predictedCount}{totalPlayers ? ` of ${totalPlayers}` : ''})
           </summary>

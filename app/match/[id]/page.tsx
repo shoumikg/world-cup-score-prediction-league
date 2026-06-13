@@ -122,35 +122,35 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
           <span className="text-xs text-gray-400">{formatKickoffIST(match.kickoff_utc)} IST</span>
           {match.venue && <span className="text-xs text-gray-400">· {match.venue}</span>}
         </div>
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-3 mb-3">
           <p className="text-base font-semibold flex-1">{homeName}</p>
           <div className="shrink-0">
             {scoreChip ?? <span className="text-sm text-gray-400 px-2">vs</span>}
           </div>
           <p className="text-base font-semibold flex-1 text-right">{awayName}</p>
         </div>
-      </div>
-
-      {/* Your prediction */}
-      <div className="bg-white rounded-xl border shadow-sm p-4 mb-4">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Your prediction</p>
-        {ownPred ? (
-          <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
-            hasResult ? scoreColor(ownPred, match) : 'bg-gray-100 text-gray-700'
-          }`}>
-            {ownPred.home_pred}–{ownPred.away_pred}
-          </span>
-        ) : (
-          <span className="text-sm text-gray-400 italic">No pick</span>
-        )}
-        {!deadlinePassed && (
-          <p className="text-xs text-gray-400 mt-2">
-            Deadline {formatKickoffIST(deadline.toISOString())} IST
-            <DeadlineCountdown deadlineISO={deadline.toISOString()} />
-            {' · '}
-            <a href="/" className="text-green-600 hover:underline">Edit on schedule →</a>
-          </p>
-        )}
+        <div className="border-t pt-3 flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-gray-400 shrink-0">Your pick</span>
+          {ownPred ? (
+            <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
+              hasResult ? scoreColor(ownPred, match) : 'bg-gray-100 text-gray-700'
+            }`}>
+              {ownPred.home_pred}–{ownPred.away_pred}
+            </span>
+          ) : (
+            <span className="text-sm text-gray-400 italic">No pick</span>
+          )}
+          {!deadlinePassed && (
+            <>
+              <span className="text-gray-200 text-xs">·</span>
+              <span className="text-xs text-gray-400">
+                Closes {formatKickoffIST(deadline.toISOString())} IST
+                <DeadlineCountdown deadlineISO={deadline.toISOString()} />
+              </span>
+              <a href="/" className="text-xs text-green-600 hover:underline shrink-0">Edit →</a>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Post-deadline sections */}
