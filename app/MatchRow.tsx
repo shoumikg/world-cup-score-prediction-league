@@ -110,7 +110,7 @@ export function MatchRow({ match, prediction, isLocked, picks }: Props) {
   )
 
   return (
-    <div className="py-3 border-b last:border-0 relative group">
+    <div className="py-3 border-b last:border-0 relative isolate group">
       {/* Invisible full-row link — team names and interactive controls sit above it via z-10 */}
       <a href={`/match/${match.id}`} className="absolute inset-0" aria-label={`Match ${match.id} detail`} />
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -121,7 +121,7 @@ export function MatchRow({ match, prediction, isLocked, picks }: Props) {
             {match.stage === 'group' && match.group_name ? (
               <a href={`/groups/${match.group_name}`}
                 className="text-xs px-1.5 py-0.5 rounded font-medium shrink-0 bg-blue-100 text-blue-700 hover:bg-blue-200 relative z-10">
-                Grp {match.group_name}
+                Group {match.group_name}
               </a>
             ) : (
               <span className="text-xs px-1.5 py-0.5 rounded font-medium shrink-0 bg-purple-100 text-purple-700">
