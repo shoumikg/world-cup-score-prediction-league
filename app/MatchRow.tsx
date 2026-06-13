@@ -134,7 +134,7 @@ export function MatchRow({ match, prediction, isLocked, picks, totalPlayers }: P
         {/* Match meta + teams: stacked on mobile, inline on sm+ */}
         <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400 w-6 text-right shrink-0">#{match.id}</span>
+            <a href={`/match/${match.id}`} className="text-xs text-gray-400 hover:text-green-600 w-6 text-right shrink-0">#{match.id}</a>
             <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${
               match.stage === 'group'
                 ? 'bg-blue-100 text-blue-700'
