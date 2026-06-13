@@ -23,6 +23,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const debug = req.nextUrl.searchParams.get('debug') === '1'
+
   const db = getAdminClient()
 
   // ── 2. Load our match list ─────────────────────────────────────────────────
@@ -89,7 +91,22 @@ export async function GET(req: NextRequest) {
     candidates.push({ ourId, fdId: f.id })
   }
 
-  // ── 7. Fetch detail for up to MAX_DETAIL_FETCHES candidates ────────────────
+  // ── 7. Debug mode: return raw API detail for first candidate ──────────────
+  if (debug) {
+    if (candidates.length === 0) {
+      return NextResponse.json({ debug: true, message: 'No candidates found', unmatched })
+    }
+    const c = candidates[0]
+    let raw
+    try {
+      raw = await fetchMatchById(c.fdId)
+    } catch (err) {
+      return NextResponse.json({ debug: true, error: String(err) }, { status: 502 })
+    }
+    return NextResponse.json({ debug: true, ourMatchId: c.ourId, fdMatchId: c.fdId, raw })
+  }
+
+  // ── 8. Fetch detail for up to MAX_DETAIL_FETCHES candidates ────────────────
   const batch = candidates.slice(0, MAX_DETAIL_FETCHES)
   let processed = 0
   let totalEvents = 0
