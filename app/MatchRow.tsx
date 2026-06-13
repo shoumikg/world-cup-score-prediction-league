@@ -118,13 +118,16 @@ export function MatchRow({ match, prediction, isLocked, picks }: Props) {
         <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400 w-6 text-right shrink-0">#{match.id}</span>
-            <span className={`text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${
-              match.stage === 'group'
-                ? 'bg-blue-100 text-blue-700'
-                : 'bg-purple-100 text-purple-700'
-            }`}>
-              {match.stage === 'group' ? `Grp ${match.group_name}` : stageLabel(match.stage)}
-            </span>
+            {match.stage === 'group' && match.group_name ? (
+              <a href={`/groups/${match.group_name}`}
+                className="text-xs px-1.5 py-0.5 rounded font-medium shrink-0 bg-blue-100 text-blue-700 hover:bg-blue-200 relative z-10">
+                Grp {match.group_name}
+              </a>
+            ) : (
+              <span className="text-xs px-1.5 py-0.5 rounded font-medium shrink-0 bg-purple-100 text-purple-700">
+                {stageLabel(match.stage)}
+              </span>
+            )}
             {/* Mobile: score chip rides the meta line, pushed right */}
             <span className="ml-auto sm:hidden">{scoreChip}</span>
           </div>
