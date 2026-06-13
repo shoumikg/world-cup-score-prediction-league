@@ -1,11 +1,79 @@
 @import "tailwindcss";
 
+/* Enable class-based dark mode: any `dark:` utility responds to a `.dark`
+   class on a wrapping element (set on <html> by the no-flash script). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --font-sans: var(--font-geist-sans);
 }
 
-/* The app is styled light-only; force light rendering even when the OS
-   prefers dark, so UA-styled controls (number inputs etc.) stay light too. */
+/* Light is the default colour scheme; the `.dark` class flips it. The no-flash
+   script also sets `style.color-scheme` inline so UA-styled controls (number
+   inputs, selects, scrollbars) match before first paint. */
 :root {
   color-scheme: light;
 }
+
+/* ───────────────────────── Dark theme ─────────────────────────
+   The app is written entirely with literal Tailwind colour utilities
+   (bg-white, text-gray-700, …). Rather than annotate every element with a
+   `dark:` variant — which is laborious and easy to miss, leaving unreadable
+   light-on-light or dark-on-dark gaps — we remap the *neutral* palette here.
+
+   These rules are intentionally unlayered, so they win over Tailwind's
+   `@layer utilities` regardless of specificity, and each is scoped to `.dark`,
+   so light mode is untouched. Only the neutral ramp (gray + the bg-white
+   surface) is remapped; accent colours (green/red/blue/amber/purple/yellow)
+   are deliberately left as-is, so coloured badges keep their meaning and
+   contrast — they simply read as light chips on the dark surface.
+
+   bg-gray-700/800 are NOT remapped: they're already-dark chips with white
+   text (LIVE pill, feedback button, FT score), and stay dark in dark mode. */
+.dark {
+  color-scheme: dark;
+}
+
+/* Keep the document background dark from the very first paint (covers
+   overscroll / rubber-band areas above and below the body). */
+html.dark {
+  background-color: #0f1218;
+}
+
+/* Default foreground for dark mode. Many headings use `font-bold` with no
+   colour class and fall back to black — this makes them legible. Explicit
+   text-gray-* / text-{accent}-* utilities still override it. */
+.dark body {
+  color: #e6e9ef;
+}
+
+/* Surfaces (background) */
+.dark .bg-white   { background-color: #171a21; } /* cards, nav, modals — raised */
+.dark .bg-gray-50 { background-color: #0f1218; } /* page bg + inset note boxes */
+.dark .bg-gray-100{ background-color: #20242d; } /* chips, hover states */
+.dark .bg-gray-200{ background-color: #2a2f3a; }
+
+/* Text (neutral ramp: higher index → lighter, mirroring light mode's darker) */
+.dark .text-gray-900 { color: #f4f6f9; }
+.dark .text-gray-800 { color: #e6e9ef; }
+.dark .text-gray-700 { color: #d2d7df; }
+.dark .text-gray-600 { color: #b7bdc7; }
+.dark .text-gray-500 { color: #9ba2ad; }
+.dark .text-gray-400 { color: #818994; }
+.dark .text-gray-300 { color: #5f6671; } /* intentionally faint (placeholders) */
+.dark .text-gray-200 { color: #4c525c; }
+
+/* Borders. Bare `border` / `divide-*` default to currentColor; give dark mode a
+   subtle default so they don't track the (now light) text colour and glare.
+   Explicit border-{colour} utilities still win (they live in the utilities
+   layer, which outranks @layer base). */
+@layer base {
+  .dark *,
+  .dark ::before,
+  .dark ::after {
+    border-color: #262b35;
+  }
+}
+.dark .border-gray-100 { border-color: #1d2129; }
+.dark .border-gray-200 { border-color: #262b35; }
+.dark .border-gray-300 { border-color: #333a45; }
