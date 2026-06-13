@@ -36,7 +36,7 @@ export function GroupTable({ group, rows, liveTeams, highlightTeam, groupPageLin
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={r.team} className={`border-t ${r.team === highlightTeam ? 'bg-blue-50' : ''}`}>
+            <tr key={r.team} className={`border-t ${r.team === highlightTeam ? 'bg-blue-50 dark:bg-blue-500/15' : ''}`}>
               <td className="pl-4 py-2">
                 <span className="text-xs text-gray-400 w-4 inline-block">{i + 1}</span>
                 <a href={`/?team=${encodeURIComponent(r.team)}`} className="font-medium hover:underline decoration-gray-300">

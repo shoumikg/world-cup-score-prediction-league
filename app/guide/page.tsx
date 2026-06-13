@@ -177,7 +177,7 @@ export default function GuidePage() {
                 <td className="px-3 py-2 border border-gray-200 text-center font-semibold">10</td>
                 <td className="px-3 py-2 border border-gray-200 text-center font-semibold">15</td>
               </tr>
-              <tr className="bg-gray-50/50">
+              <tr className="bg-gray-50/50 dark:bg-white/5">
                 <td className="px-3 py-2 border border-gray-200">
                   <span className="px-1.5 py-0.5 rounded bg-green-100 text-green-800 font-semibold">Light green</span>
                 </td>
@@ -193,7 +193,7 @@ export default function GuidePage() {
                 <td className="px-3 py-2 border border-gray-200 text-center font-semibold">3</td>
                 <td className="px-3 py-2 border border-gray-200 text-center font-semibold">5</td>
               </tr>
-              <tr className="bg-gray-50/50">
+              <tr className="bg-gray-50/50 dark:bg-white/5">
                 <td className="px-3 py-2 border border-gray-200">
                   <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-semibold">Red</span>
                 </td>

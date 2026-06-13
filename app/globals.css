@@ -17,56 +17,73 @@
 
 /* ───────────────────────── Dark theme ─────────────────────────
    The app is written entirely with literal Tailwind colour utilities
-   (bg-white, text-gray-700, …). Rather than annotate every element with a
-   `dark:` variant — which is laborious and easy to miss, leaving unreadable
-   light-on-light or dark-on-dark gaps — we remap the *neutral* palette here.
+   (bg-white, text-gray-700, …). Annotating every element with a `dark:`
+   variant is laborious and easy to miss, leaving unreadable gaps. Instead we
+   remap the *neutral* palette here.
 
-   These rules are intentionally unlayered, so they win over Tailwind's
-   `@layer utilities` regardless of specificity, and each is scoped to `.dark`,
-   so light mode is untouched. Only the neutral ramp (gray + the bg-white
-   surface) is remapped; accent colours (green/red/blue/amber/purple/yellow)
-   are deliberately left as-is, so coloured badges keep their meaning and
-   contrast — they simply read as light chips on the dark surface.
+   The gray ramp is remapped at the CSS-variable level. Every gray utility —
+   including variant forms like `hover:text-gray-900`, `odd:bg-gray-50` and
+   opacity forms like `bg-gray-50/50` — resolves `var(--color-gray-*)`, so this
+   one block flips all of them consistently. (Earlier per-class overrides only
+   matched the bare class and missed those variants.)
 
-   bg-gray-700/800 are NOT remapped: they're already-dark chips with white
-   text (LIVE pill, feedback button, FT score), and stay dark in dark mode. */
+   The ramp keeps a single value per index because, in light mode, each index
+   already serves background, border and (faint) text uses at a single
+   lightness; we mirror that to a dark lightness. Higher index → lighter,
+   the inverse of light mode, so text-gray-900 (headings) is brightest and
+   bg-gray-50 (page) is darkest.
+
+   Accent colours (green/red/blue/amber/purple/yellow) are deliberately left
+   untouched: accent-50/100 are only ever backgrounds and accent-400+ only
+   text, so coloured badges keep their meaning and read as light chips on the
+   dark surface. The few accent *containers* that host neutral text get an
+   explicit `dark:` class in their component. */
 .dark {
   color-scheme: dark;
+
+  --color-gray-50:  #0f1217; /* page bg, chips, zebra stripes, inset panels */
+  --color-gray-100: #1b1f27; /* raised chips, hover backgrounds */
+  --color-gray-200: #2b313b; /* default borders, faintest text */
+  --color-gray-300: #4a525d; /* stronger borders, faint placeholder text */
+  --color-gray-400: #828a95; /* muted text (most common) */
+  --color-gray-500: #99a1ac; /* secondary muted text */
+  --color-gray-600: #b4bbc5; /* secondary text */
+  --color-gray-700: #d0d6de; /* body text */
+  --color-gray-800: #e3e7ec; /* strong text (bg use pinned dark below) */
+  --color-gray-900: #f3f5f8; /* headings */
+  --color-gray-950: #fbfcfd;
 }
 
 /* Keep the document background dark from the very first paint (covers
    overscroll / rubber-band areas above and below the body). */
 html.dark {
-  background-color: #0f1218;
+  background-color: #0f1217;
 }
 
 /* Default foreground for dark mode. Many headings use `font-bold` with no
    colour class and fall back to black — this makes them legible. Explicit
-   text-gray-* / text-{accent}-* utilities still override it. */
+   text-* utilities still override it. */
 .dark body {
   color: #e6e9ef;
 }
 
-/* Surfaces (background) */
-.dark .bg-white   { background-color: #171a21; } /* cards, nav, modals — raised */
-.dark .bg-gray-50 { background-color: #0f1218; } /* page bg + inset note boxes */
-.dark .bg-gray-100{ background-color: #20242d; } /* chips, hover states */
-.dark .bg-gray-200{ background-color: #2a2f3a; }
+/* bg-white is the one neutral token that's overloaded (surfaces use bg-white,
+   foregrounds use text-white). It's never used with a variant, so a per-class
+   override flips only the surfaces and leaves text-white as true white on
+   coloured buttons/badges. */
+.dark .bg-white { background-color: #171a21; }
 
-/* Text (neutral ramp: higher index → lighter, mirroring light mode's darker) */
-.dark .text-gray-900 { color: #f4f6f9; }
-.dark .text-gray-800 { color: #e6e9ef; }
-.dark .text-gray-700 { color: #d2d7df; }
-.dark .text-gray-600 { color: #b7bdc7; }
-.dark .text-gray-500 { color: #9ba2ad; }
-.dark .text-gray-400 { color: #818994; }
-.dark .text-gray-300 { color: #5f6671; } /* intentionally faint (placeholders) */
-.dark .text-gray-200 { color: #4c525c; }
+/* bg-gray-700/800 are already-dark chips with white text (LIVE pill, FT score,
+   feedback button). The ramp remap turns those indices light for *text*, so
+   pin their *background* uses dark here. */
+.dark .bg-gray-800 { background-color: #232a34; }
+.dark .bg-gray-700 { background-color: #232a34; }
+.dark .hover\:bg-gray-700:hover { background-color: #2c3540; }
 
-/* Borders. Bare `border` / `divide-*` default to currentColor; give dark mode a
-   subtle default so they don't track the (now light) text colour and glare.
-   Explicit border-{colour} utilities still win (they live in the utilities
-   layer, which outranks @layer base). */
+/* Bare `border` / `divide-*` default to currentColor; give dark mode a subtle
+   default so they don't track the (now light) text colour and glare. Explicit
+   border-{colour} utilities still win — they live in the utilities layer, which
+   outranks @layer base. */
 @layer base {
   .dark *,
   .dark ::before,
@@ -74,6 +91,3 @@ html.dark {
     border-color: #262b35;
   }
 }
-.dark .border-gray-100 { border-color: #1d2129; }
-.dark .border-gray-200 { border-color: #262b35; }
-.dark .border-gray-300 { border-color: #333a45; }

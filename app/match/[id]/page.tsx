@@ -263,10 +263,10 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
             <div>
               {sortedPicks.map((entry, i) => (
                   <div key={i} className={`flex items-center gap-2 px-2 py-1.5 rounded ${
-                    entry.isSelf ? 'bg-green-50' : 'odd:bg-gray-50'
+                    entry.isSelf ? 'bg-green-50 dark:bg-green-500/10' : 'odd:bg-gray-50'
                   }`}>
                     <span className={`text-sm min-w-0 flex-1 truncate ${
-                      entry.isSelf ? 'text-green-900 font-semibold' : 'text-gray-700'
+                      entry.isSelf ? 'text-green-900 dark:text-green-300 font-semibold' : 'text-gray-700'
                     }`}>
                       {teamFlag(entry.favoriteTeam) && (
                         <span className="mr-1">{teamFlag(entry.favoriteTeam)}</span>
