@@ -3,7 +3,9 @@ import {
   parseMinute,
   normalizeOFTeamName,
   buildEventRows,
+  matchSquadPlayer,
   type OFMatch,
+  type OFPlayer,
 } from '../lib/openfootball'
 
 describe('parseMinute', () => {
@@ -106,5 +108,57 @@ describe('buildEventRows', () => {
 
   it('returns an empty array when there are no goals', () => {
     expect(buildEventRows({ team1: 'A', team2: 'B' }, 1)).toEqual([])
+  })
+})
+
+describe('matchSquadPlayer', () => {
+  const p = (number: number, name: string, pos: OFPlayer['pos'] = 'FW'): OFPlayer => ({
+    number, name, pos, date_of_birth: '2000-01-01',
+  })
+  const squad: OFPlayer[] = [
+    p(9, 'Adam Hložek'),
+    p(10, 'Patrik Schick'),
+    p(7, 'Ladislav Krejčí', 'DF'),
+    p(8, 'Vladimír Darida', 'MF'),
+    p(1, 'Matěj Kovář', 'GK'),
+  ]
+
+  it('matches an exact full name', () => {
+    const m = matchSquadPlayer('Patrik Schick', squad)
+    expect(m?.player.number).toBe(10)
+    expect(m?.method).toBe('exact')
+    expect(m?.ambiguous).toBe(false)
+  })
+
+  it('matches a bare surname', () => {
+    expect(matchSquadPlayer('Schick', squad)?.player.number).toBe(10)
+    expect(matchSquadPlayer('schick', squad)?.method).toBe('surname')
+  })
+
+  it('matches ignoring diacritics in either direction', () => {
+    expect(matchSquadPlayer('Krejci', squad)?.player.number).toBe(7)
+    expect(matchSquadPlayer('hlozek', squad)?.player.number).toBe(9)
+    expect(matchSquadPlayer('Ladislav Krejci', squad)?.player.number).toBe(7)
+  })
+
+  it('matches via substring as a last resort', () => {
+    // "darid" is not a full token, so it falls through to partial
+    const m = matchSquadPlayer('darid', squad)
+    expect(m?.player.number).toBe(8)
+    expect(m?.method).toBe('partial')
+  })
+
+  it('flags ambiguous surname matches', () => {
+    const dupes = [p(7, 'Ladislav Krejčí', 'DF'), p(14, 'Jakub Krejčí', 'MF')]
+    const m = matchSquadPlayer('Krejci', dupes)
+    expect(m?.ambiguous).toBe(true)
+    expect(m?.method).toBe('surname')
+  })
+
+  it('returns null for no match, empty text, or empty squad', () => {
+    expect(matchSquadPlayer('Ronaldo', squad)).toBeNull()
+    expect(matchSquadPlayer('', squad)).toBeNull()
+    expect(matchSquadPlayer(null, squad)).toBeNull()
+    expect(matchSquadPlayer('Schick', [])).toBeNull()
   })
 })

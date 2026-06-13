@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { formatKickoffIST, isKickedOff, predictionDeadlineUTC } from '@/lib/time'
 import { teamDisplay, teamFlag } from '@/lib/flags'
 import { GROUP_BONUS_QUESTIONS } from '@/lib/bonus'
-import { fetchSquads, normalizeOFTeamName } from '@/lib/openfootball'
+import { fetchSquads, normalizeOFTeamName, matchSquadPlayer } from '@/lib/openfootball'
 import { AdminResultForm } from './AdminResultForm'
 import { AdminKnockoutForm } from './AdminKnockoutForm'
 import { AdminBonusGradeForm } from './AdminBonusGradeForm'
@@ -166,6 +166,10 @@ export default async function AdminPage() {
                           const squadPlayers = ans.answer_team
                             ? (squadMap.get(ans.answer_team) ?? null)
                             : null
+                          // Resolve the participant's text against the squad.
+                          const suggestion = squadPlayers
+                            ? matchSquadPlayer(ans.answer_text, squadPlayers)
+                            : null
                           return (
                             <div key={p.id} className="py-3">
                               <div className="flex items-center gap-x-3 mb-2">
@@ -178,9 +182,13 @@ export default async function AdminPage() {
                               <AdminQ1GradeForm
                                 userId={p.id}
                                 questionId={q.id}
+                                rawText={ans.answer_text}
                                 isCorrect={grade?.is_correct ?? null}
                                 confirmedAnswer={grade?.confirmed_answer ?? null}
                                 players={squadPlayers}
+                                suggestedName={suggestion?.player.name ?? null}
+                                suggestedMethod={suggestion?.method ?? null}
+                                suggestedAmbiguous={suggestion?.ambiguous ?? false}
                               />
                             </div>
                           )
