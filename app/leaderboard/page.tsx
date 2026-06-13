@@ -1,8 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { computeLeaderboard } from '@/lib/leaderboard'
+import { computeBonusCorrectness, isGroupStageComplete } from '@/lib/bonusTracker'
 import { teamFlag } from '@/lib/flags'
 import { OUTCOME_CLASSES } from '@/lib/scoring'
-import type { Match, Prediction, BonusGrade } from '@/lib/types'
+import type { Match, Prediction, BonusGrade, BonusAnswer, MatchEvent } from '@/lib/types'
 import type { LeaderboardProfile } from '@/lib/leaderboard'
 
 export const dynamic = 'force-dynamic'
@@ -14,18 +15,43 @@ export default async function LeaderboardPage() {
   if (!user) return null // middleware will redirect
 
   // profiles: only safe columns — usernames must never reach this page
-  const [{ data: profiles }, { data: matches }, { data: preds }, { data: grades }] = await Promise.all([
+  const [
+    { data: profiles },
+    { data: matches },
+    { data: preds },
+    { data: grades },
+    { data: bonusAnswers },
+    { data: events },
+  ] = await Promise.all([
     supabase.from('profiles').select('id, display_name, favorite_team'),
-    supabase.from('matches').select('*').not('home_score', 'is', null),
+    supabase.from('matches').select('*'),  // all matches (group-complete check needs unscored too)
     supabase.from('predictions').select('*'),
-    supabase.from('bonus_grades').select('*'),
+    supabase.from('bonus_grades').select('user_id, question_id, confirmed_answer'),
+    supabase.from('bonus_answers').select('*'),
+    supabase.from('match_events').select('*'),
   ])
+
+  // Build confirmed Q1 map: user_id → canonical player name
+  const confirmedQ1 = new Map<string, string>()
+  for (const g of (grades ?? []) as Pick<BonusGrade, 'user_id' | 'question_id' | 'confirmed_answer'>[]) {
+    if (g.question_id === 1 && g.confirmed_answer) confirmedQ1.set(g.user_id, g.confirmed_answer)
+  }
+
+  const derivedGrades = computeBonusCorrectness(
+    (bonusAnswers ?? []) as BonusAnswer[],
+    confirmedQ1,
+    (events ?? []) as MatchEvent[],
+    (matches ?? []) as Match[]
+  )
+
+  const allMatches = (matches ?? []) as Match[]
+  const groupComplete = isGroupStageComplete(allMatches)
 
   const rows = computeLeaderboard(
     (profiles ?? []) as LeaderboardProfile[],
     (preds ?? []) as Prediction[],
-    (matches ?? []) as Match[],
-    (grades ?? []) as BonusGrade[]
+    allMatches,
+    derivedGrades
   )
 
   const anyScored = rows.some(r => r.scored > 0 || r.bonusPoints > 0)
@@ -121,7 +147,8 @@ export default async function LeaderboardPage() {
       </div>
 
       <p className="text-xs text-gray-400 mt-3">
-        Exact/GD/Result = 10/5/3 group · 15/8/5 knockout pts · Bonus = graded bonus question pts ·
+        Exact/GD/Result = 10/5/3 group · 15/8/5 knockout pts ·
+        Bonus = auto-scored from live standings{!groupComplete ? ' (provisional until group stage ends)' : ''} ·
         Missed predictions don't count against you.
       </p>
     </div>
