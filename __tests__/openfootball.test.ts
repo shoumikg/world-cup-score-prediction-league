@@ -29,7 +29,10 @@ describe('normalizeOFTeamName', () => {
   it('maps known spelling differences to our DB names', () => {
     expect(normalizeOFTeamName('Czech Republic')).toBe('Czechia')
     expect(normalizeOFTeamName('Bosnia and Herzegovina')).toBe('Bosnia-Herzegovina')
+    expect(normalizeOFTeamName('Bosnia & Herzegovina')).toBe('Bosnia-Herzegovina')
     expect(normalizeOFTeamName('Turkey')).toBe('Türkiye')
+    expect(normalizeOFTeamName('Korea Republic')).toBe('South Korea')
+    expect(normalizeOFTeamName('United States')).toBe('USA')
   })
   it('passes through already-matching names', () => {
     expect(normalizeOFTeamName('USA')).toBe('USA')

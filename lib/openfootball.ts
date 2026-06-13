@@ -46,14 +46,18 @@ export interface OFData {
 // response so missing entries can be added. Verified same: USA, South Korea,
 // Iran. The rest are insurance against spelling differences.
 const OF_TEAM_NAME_MAP: Record<string, string> = {
-  'Czech Republic':          'Czechia',
-  'Bosnia and Herzegovina':  'Bosnia-Herzegovina',
-  'Turkey':                  'Türkiye',
-  'Cabo Verde':              'Cape Verde',
-  'DR Congo':                'Congo DR',
+  'Czech Republic':             'Czechia',
+  'Bosnia and Herzegovina':     'Bosnia-Herzegovina',
+  'Bosnia & Herzegovina':       'Bosnia-Herzegovina',
+  'Turkey':                     'Türkiye',
+  'Cabo Verde':                 'Cape Verde',
+  'DR Congo':                   'Congo DR',
   'Democratic Republic of Congo': 'Congo DR',
-  "Côte d'Ivoire":           'Ivory Coast',
-  'Curacao':                 'Curaçao',
+  "Côte d'Ivoire":              'Ivory Coast',
+  "Ivory Coast":                'Ivory Coast',
+  'Curacao':                    'Curaçao',
+  'Korea Republic':             'South Korea',
+  'United States':              'USA',
 }
 
 export function normalizeOFTeamName(name: string): string {
