@@ -1,4 +1,5 @@
 import { computeGroupStandings } from './standings'
+import { normalizePlayerName } from './playerName'
 import type { Match, MatchEvent, BonusAnswer } from './types'
 
 export interface TopScorer {
@@ -98,6 +99,11 @@ export function computeBonusCorrectness(
   const { leaders: q2L } = q2Leaders(matches)
   const { leaders: q3L } = q3Leaders(matches)
 
+  // Q1 leaders come from match_events (goal-scorer names); confirmed answers come
+  // from the squads file. openfootball spells the same player differently across
+  // the two files (case + diacritics), so compare on the normalized name key.
+  const q1Keys = new Set(q1L.map(normalizePlayerName))
+
   const results: DerivedGrade[] = []
   for (const a of answers) {
     if (a.question_id === 1) {
@@ -106,7 +112,7 @@ export function computeBonusCorrectness(
       results.push({
         user_id: a.user_id,
         question_id: 1,
-        is_correct: q1L.length > 0 && q1L.includes(confirmed),
+        is_correct: q1Keys.size > 0 && q1Keys.has(normalizePlayerName(confirmed)),
       })
     } else if (a.question_id === 2) {
       results.push({

@@ -297,6 +297,31 @@ describe('computeBonusCorrectness', () => {
       )
       expect(grades.every(g => g.is_correct)).toBe(true)
     })
+
+    // openfootball spells scorers differently in worldcup.json (goal events) vs
+    // worldcup.squads.json (the source of confirmed_answer). The goal name and
+    // the confirmed squad name must match despite case/diacritic differences.
+    it('matches confirmed name to goal scorer despite case differences', () => {
+      // goal event "Hwang In-Beom" vs squad "Hwang In-beom"
+      const evs = [event(1, 'Hwang In-Beom'), event(1, 'Hwang In-Beom')]
+      const confirmed = new Map([['u1', 'Hwang In-beom']])
+      const grades = computeBonusCorrectness(
+        [answer('u1', 1, 'South Korea', 'hwang')],
+        confirmed, evs, matches
+      )
+      expect(grades[0].is_correct).toBe(true)
+    })
+
+    it('matches confirmed name to goal scorer despite diacritic differences', () => {
+      // goal event "Ladislav Krejcí" vs squad "Ladislav Krejčí"
+      const evs = [event(1, 'Ladislav Krejcí'), event(1, 'Ladislav Krejcí')]
+      const confirmed = new Map([['u1', 'Ladislav Krejčí']])
+      const grades = computeBonusCorrectness(
+        [answer('u1', 1, 'Czechia', 'krejci')],
+        confirmed, evs, matches
+      )
+      expect(grades[0].is_correct).toBe(true)
+    })
   })
 
   describe('edge cases', () => {

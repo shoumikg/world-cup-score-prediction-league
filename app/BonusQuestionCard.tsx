@@ -5,6 +5,7 @@ import { saveBonusAnswer } from '@/app/actions'
 import { BONUS_TEXT_MAX } from '@/lib/bonus'
 import { TEAM_NAMES, teamDisplay, teamFlag } from '@/lib/flags'
 import { kickoffTimerDelay } from '@/lib/time'
+import { normalizePlayerName } from '@/lib/playerName'
 import type { BonusAnswer, BonusPickEntry } from '@/lib/types'
 import type { BonusQuestion } from '@/lib/bonus'
 
@@ -24,7 +25,11 @@ function pickStatus(
 ): PickStatus {
   if (!effectiveAnswer) return 'unmapped'
   if (leaders.length === 0) return 'no_data'
-  const isTop = leaders.includes(effectiveAnswer)
+  // Q1 leaders are goal-scorer names; the pick is the admin-confirmed squad name.
+  // The two openfootball files disagree on case/diacritics, so compare on the
+  // normalized key (a no-op for Q2/Q3 team names, which share one DB source).
+  const key = normalizePlayerName(effectiveAnswer)
+  const isTop = leaders.some(l => normalizePlayerName(l) === key)
   if (isComplete) return isTop ? 'correct' : 'behind'
   return isTop ? 'leading' : 'behind'
 }
