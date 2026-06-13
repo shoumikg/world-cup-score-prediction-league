@@ -35,7 +35,7 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
   const [{ data: matchRaw }, { data: predsRaw }, { data: profilesRaw }, { data: eventsRaw }] = await Promise.all([
     supabase.from('matches').select('*').eq('id', matchId).single(),
     supabase.from('predictions').select('*').eq('match_id', matchId),
-    supabase.from('profiles').select('id, display_name, favorite_team'),
+    supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
     supabase.from('match_events').select('*').eq('match_id', matchId).order('minute').order('extra_time'),
   ])
 
@@ -43,8 +43,8 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
 
   const match = matchRaw as Match
   const preds = (predsRaw ?? []) as Prediction[]
-  type ProfileRow = { id: string; display_name: string; favorite_team: string | null }
-  const profiles = (profilesRaw ?? []) as ProfileRow[]
+  type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
+  const profiles = ((profilesRaw ?? []) as ProfileRow[]).filter(p => !p.is_admin)
   const events = (eventsRaw ?? []) as MatchEvent[]
 
   const deadlinePassed = isDeadlinePassed(match.kickoff_utc)
