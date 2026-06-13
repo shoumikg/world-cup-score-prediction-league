@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { istDateKey, formatDateIST, formatKickoffIST, isKickedOff, isDeadlinePassed, predictionDeadlineUTC } from '@/lib/time'
+import { computeGroupStandings } from '@/lib/standings'
 import { MatchRow } from '@/app/MatchRow'
+import { GroupTable } from '@/app/GroupTable'
 import { DeadlineCountdown } from '@/app/DeadlineCountdown'
 import { LiveRefresh } from '@/app/LiveRefresh'
 import { teamFlag } from '@/lib/flags'
@@ -38,6 +40,21 @@ export default async function SchedulePage(props: {
 
   const allMatches = (matches ?? []) as Match[]
   const hasLive = allMatches.some(m => m.status === 'live')
+
+  const liveTeams = new Set(
+    allMatches
+      .filter(m => m.status === 'live')
+      .flatMap(m => [m.home_team, m.away_team])
+      .filter(Boolean) as string[]
+  )
+
+  // For the team filter view: find which group the filtered team is in
+  const teamGroupName = teamFilter
+    ? allMatches.find(m => m.stage === 'group' && (m.home_team === teamFilter || m.away_team === teamFilter))?.group_name ?? null
+    : null
+  const teamGroupRows = teamGroupName
+    ? computeGroupStandings(allMatches.filter(m => m.stage === 'group')).get(teamGroupName) ?? null
+    : null
 
   const visibleMatches = teamFilter
     ? allMatches.filter(m => m.home_team === teamFilter || m.away_team === teamFilter)
@@ -77,6 +94,18 @@ export default async function SchedulePage(props: {
           </a>
         )}
       </div>
+
+      {teamFilter && teamGroupRows && teamGroupName && (
+        <div className="mb-6">
+          <GroupTable
+            group={teamGroupName}
+            rows={teamGroupRows}
+            liveTeams={liveTeams}
+            highlightTeam={teamFilter}
+            groupPageLink
+          />
+        </div>
+      )}
 
       <div className="mb-4 text-xs text-gray-400 flex gap-4 flex-wrap">
         <span className="flex items-center gap-1">
