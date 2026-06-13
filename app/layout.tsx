@@ -4,6 +4,8 @@ import "./globals.css";
 import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/actions";
 import { FeedbackWidget } from "@/app/FeedbackWidget";
+import { WhatsNewModal } from "@/app/WhatsNewModal";
+import { unseenEntries } from "@/lib/changelog";
 import { Analytics } from "@vercel/analytics/next";
 
 const geistSans = Geist({
@@ -29,13 +31,17 @@ export default async function RootLayout({
   const { data: { user } } = await supabase.auth.getUser();
 
   let profile = null;
+  let unseenCount = 0;
+  let unseenForModal: ReturnType<typeof unseenEntries> = [];
   if (user) {
-    const { data } = await supabase
-      .from("profiles")
-      .select("username, is_admin")
-      .eq("id", user.id)
-      .single();
-    profile = data;
+    const [{ data: profileData }, { data: readRow }] = await Promise.all([
+      supabase.from("profiles").select("username, is_admin").eq("id", user.id).single(),
+      supabase.from("whats_new_reads").select("seen_id").eq("user_id", user.id).single(),
+    ]);
+    profile = profileData;
+    const seenId = readRow?.seen_id ?? 0;
+    unseenForModal = unseenEntries(seenId);
+    unseenCount = unseenForModal.length;
   }
 
   return (
@@ -68,6 +74,14 @@ export default async function RootLayout({
                 <a href="/bonus" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Bonus</a>
                 <a href="/bracket" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Bracket</a>
                 <a href="/compare" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Compare</a>
+                <a href="/whats-new" className="text-gray-600 hover:text-gray-900 whitespace-nowrap flex items-center gap-1">
+                  What&rsquo;s New
+                  {unseenCount > 0 && (
+                    <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-green-500 text-white text-[10px] font-bold leading-none">
+                      {unseenCount}
+                    </span>
+                  )}
+                </a>
                 {profile?.is_admin && (
                   <a href="/admin" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Admin</a>
                 )}
@@ -79,6 +93,9 @@ export default async function RootLayout({
           </nav>
         )}
         <main className="flex-1">{children}</main>
+        {user && unseenForModal.length > 0 && (
+          <WhatsNewModal entries={unseenForModal} />
+        )}
         <FeedbackWidget />
         <Analytics />
       </body>
