@@ -38,7 +38,7 @@ export default async function AdminPage() {
     supabase.from('matches').select('*').order('kickoff_utc'),
     supabase.from('bonus_answers').select('*'),
     supabase.from('bonus_grades').select('*'),
-    supabase.from('profiles').select('id, display_name, favorite_team'),
+    supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
     supabase.from('match_events').select('*'),
     fetchSquads().catch(() => null),
   ])
@@ -75,8 +75,8 @@ export default async function AdminPage() {
     ? predictionDeadlineUTC(firstGroupKickoff) <= new Date()
     : false
 
-  type ProfileRow = { id: string; display_name: string; favorite_team: string | null }
-  const profileList = (profiles ?? []) as ProfileRow[]
+  type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
+  const profileList = ((profiles ?? []) as ProfileRow[]).filter(p => !p.is_admin)
   const profileMap = new Map(profileList.map(p => [p.id, p]))
 
   // answerMap: questionId → userId → answer

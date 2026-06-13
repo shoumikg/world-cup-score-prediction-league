@@ -25,7 +25,7 @@ export default async function SchedulePage(props: {
   const [{ data: matches }, { data: allPreds }, { data: profiles }, squads] = await Promise.all([
     supabase.from('matches').select('*').order('kickoff_utc'),
     supabase.from('predictions').select('*'), // RLS: own always + others' after deadline
-    supabase.from('profiles').select('id, display_name, favorite_team'),
+    supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
     // Squads only needed when filtering by team; silently null on error so the
     // rest of the page never fails because of the openfootball CDN.
     teamFilter ? fetchSquads().catch(() => null) : Promise.resolve(null),
@@ -33,8 +33,8 @@ export default async function SchedulePage(props: {
 
   const teamSquad = teamFilter && squads ? findSquad(squads, teamFilter) : null
 
-  type ProfileRow = { id: string; display_name: string; favorite_team: string | null }
-  const profileList = (profiles ?? []) as ProfileRow[]
+  type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
+  const profileList = ((profiles ?? []) as ProfileRow[]).filter(p => !p.is_admin)
 
   // own prediction per match (always returned by RLS)
   const predMap = new Map<number, Prediction>()

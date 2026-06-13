@@ -20,7 +20,7 @@ export default async function GroupPage(props: { params: Promise<{ group: string
   const [{ data: matchesRaw }, { data: allPredsRaw }, { data: profilesRaw }] = await Promise.all([
     supabase.from('matches').select('*').eq('stage', 'group').eq('group_name', groupName).order('kickoff_utc'),
     supabase.from('predictions').select('*'),
-    supabase.from('profiles').select('id, display_name, favorite_team'),
+    supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
   ])
 
   const allMatches = (matchesRaw ?? []) as Match[]
@@ -33,8 +33,8 @@ export default async function GroupPage(props: { params: Promise<{ group: string
     predByMatchUser.set(`${p.match_id}:${p.user_id}`, { homePred: p.home_pred, awayPred: p.away_pred })
   }
 
-  type ProfileRow = { id: string; display_name: string; favorite_team: string | null }
-  const profileList = (profilesRaw ?? []) as ProfileRow[]
+  type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
+  const profileList = ((profilesRaw ?? []) as ProfileRow[]).filter(p => !p.is_admin)
 
   const standings = computeGroupStandings(allMatches)
   const groupRows = standings.get(groupName) ?? []
