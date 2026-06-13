@@ -171,7 +171,7 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
           <div className="flex gap-4">
             {/* Home goals */}
             <div className="flex-1">
-              <p className="text-xs text-gray-400 mb-2 truncate font-medium">{match.home_team ?? 'Home'}</p>
+              <p className="text-xs text-gray-400 mb-2 truncate font-medium">{homeName}</p>
               <div className="space-y-1.5">
                 {events.filter(e => e.team === 'home').length > 0
                   ? events.filter(e => e.team === 'home').map(e => (
@@ -185,7 +185,7 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
             <div className="w-px bg-gray-100 shrink-0" />
             {/* Away goals */}
             <div className="flex-1">
-              <p className="text-xs text-gray-400 mb-2 truncate font-medium">{match.away_team ?? 'Away'}</p>
+              <p className="text-xs text-gray-400 mb-2 truncate font-medium">{awayName}</p>
               <div className="space-y-1.5">
                 {events.filter(e => e.team === 'away').length > 0
                   ? events.filter(e => e.team === 'away').map(e => (
