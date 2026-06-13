@@ -17,7 +17,6 @@ interface Props {
 export function MatchRow({ match, prediction, isLocked, picks }: Props) {
   const homeName = teamDisplay(match.home_team, match.home_source ?? 'TBD')
   const awayName = teamDisplay(match.away_team, match.away_source ?? 'TBD')
-  const isPlaceholder = !match.home_team
 
   const deadlineISO = predictionDeadlineUTC(match.kickoff_utc).toISOString()
 
@@ -133,8 +132,7 @@ export function MatchRow({ match, prediction, isLocked, picks }: Props) {
           {/* Team names — individually linked to filtered schedule, above the row overlay */}
           <span className="text-sm font-medium sm:min-w-0 relative z-10">
             {match.home_team ? (
-              <a href={`/?team=${encodeURIComponent(match.home_team)}`}
-                className={`hover:underline ${isPlaceholder ? 'text-gray-400 italic' : ''}`}>
+              <a href={`/?team=${encodeURIComponent(match.home_team)}`} className="hover:underline">
                 {homeName}
               </a>
             ) : (

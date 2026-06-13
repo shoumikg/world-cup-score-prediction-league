@@ -36,8 +36,6 @@ export default async function SchedulePage(props: {
     predByMatchUser.set(`${p.match_id}:${p.user_id}`, { homePred: p.home_pred, awayPred: p.away_pred })
   }
 
-  const totalPlayers = profileList.length
-
   const allMatches = (matches ?? []) as Match[]
   const hasLive = allMatches.some(m => m.status === 'live')
 

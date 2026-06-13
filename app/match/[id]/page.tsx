@@ -4,7 +4,7 @@ import { formatKickoffIST, isDeadlinePassed, predictionDeadlineUTC } from '@/lib
 import { teamDisplay, teamFlag } from '@/lib/flags'
 import { scoreColor, scoreOutcome, stageLabel, OUTCOME_CLASSES } from '@/lib/scoring'
 import { DeadlineCountdown } from '@/app/DeadlineCountdown'
-import type { Match, Prediction } from '@/lib/types'
+import type { Match, Prediction, PickEntry } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,12 +40,6 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
 
   // Build pick list — RLS returns others' picks only after deadline
   const predMap = new Map(preds.map(p => [p.user_id, p]))
-  type PickEntry = {
-    displayName: string
-    favoriteTeam: string | null
-    isSelf: boolean
-    prediction: { homePred: number; awayPred: number } | null
-  }
   const picksList: PickEntry[] = profiles.map(profile => ({
     displayName: profile.display_name,
     favoriteTeam: profile.favorite_team,
@@ -199,13 +193,13 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Predicted result split</p>
               <div className="flex flex-wrap gap-2">
                 <span className="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700">
-                  {match.home_team ?? homeName} <span className="font-semibold ml-1">{homeWins}</span>
+                  {homeName} <span className="font-semibold ml-1">{homeWins}</span>
                 </span>
                 <span className="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700">
                   Draw <span className="font-semibold ml-1">{draws}</span>
                 </span>
                 <span className="text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-700">
-                  {match.away_team ?? awayName} <span className="font-semibold ml-1">{awayWins}</span>
+                  {awayName} <span className="font-semibold ml-1">{awayWins}</span>
                 </span>
               </div>
             </div>
@@ -214,11 +208,8 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
           {/* All picks */}
           <div className="bg-white rounded-xl border shadow-sm p-4">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">All picks</p>
-            {sortedPicks.length === 0 ? (
-              <p className="text-sm text-gray-400 italic">No picks for this match.</p>
-            ) : (
-              <div>
-                {sortedPicks.map((entry, i) => (
+            <div>
+              {sortedPicks.map((entry, i) => (
                   <div key={i} className={`flex items-center gap-2 px-2 py-1.5 rounded ${
                     entry.isSelf ? 'bg-green-50' : 'odd:bg-gray-50'
                   }`}>
@@ -243,8 +234,7 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
                     )}
                   </div>
                 ))}
-              </div>
-            )}
+            </div>
           </div>
         </>
       )}
