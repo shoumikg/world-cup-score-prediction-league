@@ -105,9 +105,12 @@ export function BonusQuestionCard({
 
   const answeredCount = picks?.filter(p => p.answer !== null).length ?? 0
 
-  function chipLabel(answer: { text: string | null; team: string }): string {
+  // For Q1, show the admin-confirmed canonical player name once mapped,
+  // falling back to the participant's raw text entry while still unmapped.
+  function chipLabel(answer: { text: string | null; team: string }, confirmed?: string | null): string {
     if (question.type === 'player') {
-      return `${answer.text ?? ''} (${teamDisplay(answer.team, answer.team)})`
+      const name = confirmed || answer.text || ''
+      return `${name} (${teamDisplay(answer.team, answer.team)})`
     }
     return teamDisplay(answer.team, answer.team)
   }
@@ -148,21 +151,30 @@ export function BonusQuestionCard({
       )}
 
       {locked ? (
-        <div className="flex flex-wrap items-center gap-2">
-          {displayAnswer ? (
-            <span className="text-sm font-semibold px-2.5 py-1 rounded bg-gray-100 text-gray-700">
-              {chipLabel(displayAnswer)}
-            </span>
-          ) : (
-            <span className="text-xs text-gray-300 italic">no pick</span>
-          )}
-          {ownStatus && ownStatus !== 'no_data' && (
-            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_CHIP[ownStatus].cls}`}>
-              {STATUS_CHIP[ownStatus].label}
-            </span>
-          )}
-          {question.type === 'player' && !ownConfirmedAnswer && displayAnswer && (
-            <span className="text-xs text-amber-600">⏳ Pending admin mapping</span>
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            {displayAnswer ? (
+              <span className="text-sm font-semibold px-2.5 py-1 rounded bg-gray-100 text-gray-700">
+                {chipLabel(displayAnswer, ownConfirmedAnswer)}
+              </span>
+            ) : (
+              <span className="text-xs text-gray-300 italic">no pick</span>
+            )}
+            {ownStatus && ownStatus !== 'no_data' && (
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${STATUS_CHIP[ownStatus].cls}`}>
+                {STATUS_CHIP[ownStatus].label}
+              </span>
+            )}
+            {question.type === 'player' && !ownConfirmedAnswer && displayAnswer && (
+              <span className="text-xs text-amber-600">⏳ Pending admin mapping</span>
+            )}
+          </div>
+          {/* Show the participant their original text when it was mapped to a different canonical name */}
+          {question.type === 'player' && ownConfirmedAnswer && displayAnswer?.text &&
+            displayAnswer.text.trim().toLowerCase() !== ownConfirmedAnswer.toLowerCase() && (
+            <p className="text-xs text-gray-400 mt-1">
+              Confirmed from your entry &ldquo;{displayAnswer.text}&rdquo;
+            </p>
           )}
         </div>
       ) : (
@@ -235,7 +247,7 @@ export function BonusQuestionCard({
                   </span>
                   {entry.answer !== null ? (
                     <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 shrink-0 max-w-48 truncate">
-                      {chipLabel(entry.answer)}
+                      {chipLabel(entry.answer, entry.confirmedAnswer)}
                     </span>
                   ) : (
                     <span className="text-xs text-gray-300 italic shrink-0">no pick</span>
