@@ -15,6 +15,8 @@
 // assist data and no penalty flag — only the scorer, minute, and an owngoal
 // boolean. Penalty-shootout goals are not in goals1/goals2.
 
+import { normalizePlayerName } from './playerName'
+
 const DATA_URL =
   'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json'
 
@@ -190,18 +192,8 @@ export function calcAge(dob: string): number {
 // Maps a participant's free-text Q1 entry (e.g. "schick", "Patrik Schick",
 // "messi") to a real player in the selected team's squad. Squad names are full
 // names with diacritics ("Patrik Schick"); entries are arbitrary text, so we
-// compare on a diacritic-stripped, lower-cased, punctuation-free basis.
-
-// "Patrik Schick" / "PÉREZ" → "patrik schick" / "perez"
-function normalizePlayerName(s: string): string {
-  return (s ?? '')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '') // strip combining diacritics
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')    // punctuation → space
-    .replace(/\s+/g, ' ')
-    .trim()
-}
+// compare on a diacritic-stripped, lower-cased, punctuation-free basis via the
+// shared normalizePlayerName key (also used when scoring Q1 against goal events).
 
 export type SquadMatchMethod = 'exact' | 'surname' | 'partial'
 

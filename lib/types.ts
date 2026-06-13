@@ -52,6 +52,7 @@ export interface BonusPickEntry {
   displayName: string
   favoriteTeam: string | null
   answer: { text: string | null; team: string } | null
+  confirmedAnswer?: string | null  // Q1 only: admin-mapped canonical player name
 }
 
 export interface BonusGrade {

@@ -16,13 +16,13 @@ export default async function ComparePage(props: {
   if (!user) return null
 
   const [{ data: profilesRaw }, { data: matchesRaw }, { data: predsRaw }] = await Promise.all([
-    supabase.from('profiles').select('id, display_name, favorite_team'),
+    supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
     supabase.from('matches').select('*').order('kickoff_utc'),
     supabase.from('predictions').select('*'),
   ])
 
-  type ProfileRow = { id: string; display_name: string; favorite_team: string | null }
-  const allProfiles = (profilesRaw ?? []) as ProfileRow[]
+  type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
+  const allProfiles = ((profilesRaw ?? []) as ProfileRow[]).filter(p => !p.is_admin)
   const allMatches  = (matchesRaw  ?? []) as Match[]
   const allPreds    = (predsRaw    ?? []) as Prediction[]
 

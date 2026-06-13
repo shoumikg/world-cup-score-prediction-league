@@ -4,11 +4,11 @@ import { formatKickoffIST, isKickedOff, predictionDeadlineUTC } from '@/lib/time
 import { teamDisplay, teamFlag } from '@/lib/flags'
 import { GROUP_BONUS_QUESTIONS } from '@/lib/bonus'
 import { fetchSquads, normalizeOFTeamName, matchSquadPlayer } from '@/lib/openfootball'
+import { q1Leaders, q2Leaders, q3Leaders, isGroupStageComplete } from '@/lib/bonusTracker'
 import { AdminResultForm } from './AdminResultForm'
 import { AdminKnockoutForm } from './AdminKnockoutForm'
-import { AdminBonusGradeForm } from './AdminBonusGradeForm'
 import { AdminQ1GradeForm } from './AdminQ1GradeForm'
-import type { Match, BonusAnswer, BonusGrade } from '@/lib/types'
+import type { Match, BonusAnswer, BonusGrade, MatchEvent } from '@/lib/types'
 import type { OFPlayer } from '@/lib/openfootball'
 
 export const dynamic = 'force-dynamic'
@@ -32,14 +32,18 @@ export default async function AdminPage() {
     { data: bonusAnswers },
     { data: bonusGrades },
     { data: profiles },
+    { data: events },
     squads,
   ] = await Promise.all([
     supabase.from('matches').select('*').order('kickoff_utc'),
     supabase.from('bonus_answers').select('*'),
     supabase.from('bonus_grades').select('*'),
     supabase.from('profiles').select('id, display_name, favorite_team'),
+    supabase.from('match_events').select('*'),
     fetchSquads().catch(() => null),
   ])
+
+  const all = (matches ?? []) as Match[]
 
   // Build a map from DB team name → squad players for Q1 grading
   const squadMap = new Map<string, OFPlayer[]>()
@@ -49,7 +53,18 @@ export default async function AdminPage() {
     }
   }
 
-  const all = (matches ?? []) as Match[]
+  // Live derived leaders for each bonus question
+  const eventList = (events ?? []) as MatchEvent[]
+  const derivedQ2 = q2Leaders(all)
+  const derivedQ3 = q3Leaders(all)
+  const derivedQ1 = q1Leaders(eventList, all)
+  const groupComplete = isGroupStageComplete(all)
+
+  const derivedLeaders: Record<number, { leaders: string[]; stat: number; statLabel: string }> = {
+    1: { ...derivedQ1, statLabel: 'goal' },
+    2: { ...derivedQ2, statLabel: 'goals scored' },
+    3: { ...derivedQ3, statLabel: 'goals conceded' },
+  }
   const started = all.filter(m => isKickedOff(m.kickoff_utc))
   const knockouts = all.filter(m => m.stage !== 'group' && !m.home_team)
 
@@ -72,8 +87,8 @@ export default async function AdminPage() {
     qMap.set(a.user_id, a)
   }
 
-  // gradeMap: `userId:questionId` → BonusGrade
-  const gradeMap = new Map<string, BonusGrade>()
+  // gradeMap: `userId:questionId` → BonusGrade (only Q1 confirmed_answer used now)
+  const gradeMap = new Map<string, Pick<BonusGrade, 'user_id' | 'question_id' | 'is_correct' | 'confirmed_answer'>>()
   for (const g of (bonusGrades ?? []) as BonusGrade[]) {
     gradeMap.set(`${g.user_id}:${g.question_id}`, g)
   }
@@ -144,12 +159,23 @@ export default async function AdminPage() {
                 .filter(p => qAnswers?.has(p.id))
                 .sort((a, b) => a.display_name.localeCompare(b.display_name))
 
+              const qLeadInfo = derivedLeaders[q.id]
               return (
                 <div key={q.id} className="bg-white rounded-xl border shadow-sm px-4 py-4">
-                  <p className="text-sm font-medium text-gray-800 mb-0.5">
-                    {q.text}
-                    <span className="ml-2 text-xs text-gray-400 font-normal">({q.points} pts)</span>
-                  </p>
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 mb-0.5">
+                    <p className="text-sm font-medium text-gray-800">
+                      {q.text}
+                      <span className="ml-2 text-xs text-gray-400 font-normal">({q.points} pts)</span>
+                    </p>
+                    {qLeadInfo.leaders.length > 0 && (
+                      <span className="text-xs text-gray-500 shrink-0">
+                        {groupComplete ? 'Winner:' : 'Leader:'}{' '}
+                        <span className="font-medium text-gray-700">{qLeadInfo.leaders.join(', ')}</span>
+                        {' '}· {qLeadInfo.stat} {qLeadInfo.statLabel}
+                        {!groupComplete && <span className="text-amber-500 ml-1">(provisional)</span>}
+                      </span>
+                    )}
+                  </div>
                   {answerers.length === 0 ? (
                     <p className="text-xs text-gray-400 mt-2">No answers submitted.</p>
                   ) : (
@@ -194,6 +220,9 @@ export default async function AdminPage() {
                           )
                         }
 
+                        // Q2/Q3: auto-derived — show status badge, no manual grading
+                        const qLeaders = derivedLeaders[q.id]
+                        const isCorrect = qLeaders.leaders.length > 0 && qLeaders.leaders.includes(ans.answer_team)
                         return (
                           <div key={p.id} className="py-2 flex flex-wrap items-center gap-x-3 gap-y-1">
                             <span className="text-sm text-gray-700 min-w-0 flex-1">
@@ -201,11 +230,13 @@ export default async function AdminPage() {
                               {p.display_name}
                             </span>
                             <span className="text-xs text-gray-500 shrink-0">{answerLabel}</span>
-                            <AdminBonusGradeForm
-                              userId={p.id}
-                              questionId={q.id}
-                              isCorrect={grade?.is_correct ?? null}
-                            />
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              isCorrect
+                                ? (groupComplete ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700')
+                                : 'bg-red-100 text-red-600'
+                            }`}>
+                              {isCorrect ? (groupComplete ? '✓ Correct' : '● Leading') : '✗ Behind'}
+                            </span>
                           </div>
                         )
                       })}
