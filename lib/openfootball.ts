@@ -134,3 +134,54 @@ export async function fetchWorldCupData(): Promise<OFData> {
   const json = (await res.json()) as OFData
   return { name: json.name, matches: json.matches ?? [] }
 }
+
+// ── Squads ──────────────────────────────────────────────────────────────────
+
+const SQUADS_URL =
+  'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.squads.json'
+
+export interface OFPlayer {
+  number: number
+  pos: 'GK' | 'DF' | 'MF' | 'FW'
+  name: string
+  date_of_birth: string // YYYY-MM-DD
+}
+
+export interface OFSquad {
+  name: string      // openfootball name (may differ from our DB name)
+  fifa_code: string
+  group: string     // "A"…"L"
+  players: OFPlayer[]
+}
+
+// Squads are published pre-tournament and change only for injury replacements.
+// Cache for 1 hour so a forced-dynamic page doesn't hit GitHub on every render.
+export async function fetchSquads(): Promise<OFSquad[]> {
+  const res = await fetch(SQUADS_URL, {
+    next: { revalidate: 3600 },
+    signal: AbortSignal.timeout(15_000),
+  })
+  if (!res.ok) {
+    const body = (await res.text()).slice(0, 300)
+    throw new Error(`openfootball squads ${res.status}: ${body}`)
+  }
+  const json = await res.json()
+  return (Array.isArray(json) ? json : []) as OFSquad[]
+}
+
+// Find the squad for a team by our DB team name.
+// Normalises the openfootball name before comparing so e.g. "Korea Republic"
+// matches "South Korea" in our DB.
+export function findSquad(squads: OFSquad[], dbTeamName: string): OFSquad | undefined {
+  return squads.find(s => normalizeOFTeamName(s.name) === dbTeamName)
+}
+
+// Player age in complete years as of today.
+export function calcAge(dob: string): number {
+  const birth = new Date(dob)
+  const today = new Date()
+  let age = today.getFullYear() - birth.getFullYear()
+  const m = today.getMonth() - birth.getMonth()
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--
+  return age
+}
