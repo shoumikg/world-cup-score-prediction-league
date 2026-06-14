@@ -9,7 +9,14 @@ import type { LeaderboardProfile } from '@/lib/leaderboard'
 
 export const dynamic = 'force-dynamic'
 
-export default async function LeaderboardPage() {
+export default async function LeaderboardPage(props: {
+  searchParams: Promise<{ bonus?: string }>
+}) {
+  const { bonus: bonusParam } = await props.searchParams
+  // Default: bonus points count toward the standings. ?bonus=off ranks on
+  // match points only (the Bonus column is hidden). View-only — no data changes.
+  const showBonus = bonusParam !== 'off'
+
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -55,7 +62,7 @@ export default async function LeaderboardPage() {
     playerProfiles,
     (preds ?? []) as Prediction[],
     allMatches,
-    derivedGrades
+    showBonus ? derivedGrades : []
   )
 
   // While a match is in progress the standings above already fold in live
@@ -77,7 +84,7 @@ export default async function LeaderboardPage() {
       playerProfiles,
       (preds ?? []) as Prediction[],
       finishedMatches,
-      baseDerivedGrades
+      showBonus ? baseDerivedGrades : []
     )
     const baseline = new Map(baselineRows.map(r => [r.userId, r]))
     // Points in play = each player's match points from predictions on the games
@@ -110,6 +117,26 @@ export default async function LeaderboardPage() {
           : 'Everyone in the league. Tallies appear once results come in.'}
       </p>
 
+      {/* Ranking basis toggle — view-only, switches via URL param */}
+      <div className="mb-4 inline-flex rounded-lg border bg-gray-50 p-0.5 text-xs font-medium">
+        <a
+          href="/leaderboard"
+          className={`px-3 py-1.5 rounded-md transition-colors ${
+            showBonus ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Incl. bonus
+        </a>
+        <a
+          href="/leaderboard?bonus=off"
+          className={`px-3 py-1.5 rounded-md transition-colors ${
+            !showBonus ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Match points only
+        </a>
+      </div>
+
       {hasLive && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm">
           <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
@@ -129,7 +156,7 @@ export default async function LeaderboardPage() {
               <th className="font-medium w-14 py-2">GD</th>
               <th className="font-medium w-14 py-2">Result</th>
               <th className="font-medium w-14 py-2">Wrong</th>
-              <th className="font-medium w-14 py-2">Bonus</th>
+              {showBonus && <th className="font-medium w-14 py-2">Bonus</th>}
               <th className="font-medium w-14 pr-3 py-2">Pts</th>
             </tr>
           </thead>
@@ -194,11 +221,13 @@ export default async function LeaderboardPage() {
                     {r.wrong}
                   </span>
                 </td>
-                <td className="text-center py-2.5">
-                  <span className="inline-block w-8 px-1 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold text-xs">
-                    {r.bonusPoints}
-                  </span>
-                </td>
+                {showBonus && (
+                  <td className="text-center py-2.5">
+                    <span className="inline-block w-8 px-1 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold text-xs">
+                      {r.bonusPoints}
+                    </span>
+                  </td>
+                )}
                 <td className="text-center py-2.5 pr-3 whitespace-nowrap">
                   <span className="font-bold text-gray-900 text-sm">{r.total}</span>
                   {info && info.inPlay > 0 && (
@@ -216,7 +245,9 @@ export default async function LeaderboardPage() {
 
       <p className="text-xs text-gray-400 mt-3">
         Exact/GD/Result = 10/5/3 group · 15/8/5 knockout pts ·
-        Bonus = auto-scored from live standings{!groupComplete ? ' (provisional until group stage ends)' : ''} ·
+        {showBonus
+          ? <> Bonus = auto-scored from live standings{!groupComplete ? ' (provisional until group stage ends)' : ''} · </>
+          : <> Bonus points excluded · </>}
         Missed predictions don't count against you.
       </p>
     </div>
