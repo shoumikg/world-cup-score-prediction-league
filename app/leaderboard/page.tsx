@@ -128,22 +128,23 @@ export default async function LeaderboardPage() {
                   )}
                 </td>
                 <td className="py-2.5 font-medium sticky left-8 bg-white z-10 pr-2">
-                  {r.userId === user.id ? (
-                    <span>
-                      <span className="mr-1.5">{teamFlag(r.favoriteTeam) ?? '🇮🇳'}</span>
-                      {r.displayName}
-                    </span>
-                  ) : (
-                    <a
-                      href={`/compare?a=${encodeURIComponent(currentUserName)}&b=${encodeURIComponent(r.displayName)}`}
-                      className="hover:underline decoration-gray-300"
-                    >
-                      <span className="mr-1.5">{teamFlag(r.favoriteTeam) ?? '🇮🇳'}</span>
-                      {r.displayName}
-                    </a>
-                  )}
-                  {r.recentForm.length > 0 && (
-                    <span className="ml-2 inline-flex gap-0.5 align-middle">
+                  <div className="flex flex-col gap-1">
+                    {r.userId === user.id ? (
+                      <span>
+                        <span className="mr-1.5">{teamFlag(r.favoriteTeam) ?? '🇮🇳'}</span>
+                        {r.displayName}
+                      </span>
+                    ) : (
+                      <a
+                        href={`/compare?a=${encodeURIComponent(currentUserName)}&b=${encodeURIComponent(r.displayName)}`}
+                        className="hover:underline decoration-gray-300"
+                      >
+                        <span className="mr-1.5">{teamFlag(r.favoriteTeam) ?? '🇮🇳'}</span>
+                        {r.displayName}
+                      </a>
+                    )}
+                    {/* Form strip on its own line — always rendered (fixed height) so every row is the same height */}
+                    <span className="flex gap-0.5 items-center h-2.5">
                       {r.recentForm.map((outcome, j) => (
                         <span
                           key={j}
@@ -152,7 +153,7 @@ export default async function LeaderboardPage() {
                         />
                       ))}
                     </span>
-                  )}
+                  </div>
                 </td>
                 <td className="text-center py-2.5">
                   <span className="inline-block w-8 px-1 py-0.5 rounded bg-green-700 text-white font-semibold text-xs">
