@@ -5,6 +5,7 @@ import type { Match, MatchEvent, BonusAnswer } from './types'
 export interface TopScorer {
   playerName: string
   goals: number
+  team: string   // actual team name resolved from the match (home_team or away_team)
 }
 
 // Goals scored in group-stage matches; own goals excluded (they don't
@@ -13,29 +14,42 @@ export function groupTopScorers(events: MatchEvent[], matches: Match[]): TopScor
   const groupMatchIds = new Set(
     matches.filter(m => m.stage === 'group').map(m => m.id)
   )
-  const tally = new Map<string, number>()
+  const matchMap = new Map(matches.map(m => [m.id, m]))
+  const tally = new Map<string, { goals: number; team: string }>()
   for (const e of events) {
     if (!groupMatchIds.has(e.match_id)) continue
     if (e.type === 'own_goal') continue
-    tally.set(e.player_name, (tally.get(e.player_name) ?? 0) + 1)
+    const match = matchMap.get(e.match_id)
+    const teamName = match
+      ? (e.team === 'home' ? (match.home_team ?? '') : (match.away_team ?? ''))
+      : ''
+    const existing = tally.get(e.player_name)
+    if (existing) {
+      existing.goals += 1
+    } else {
+      tally.set(e.player_name, { goals: 1, team: teamName })
+    }
   }
   return [...tally.entries()]
-    .map(([playerName, goals]) => ({ playerName, goals }))
+    .map(([playerName, { goals, team }]) => ({ playerName, goals, team }))
     .sort((a, b) => b.goals - a.goals || a.playerName.localeCompare(b.playerName))
 }
 
 export interface BonusLeaders {
-  leaders: string[]   // canonical names tied for first (empty = no data yet)
-  stat: number        // the leading statistic value
+  leaders: string[]       // canonical names tied for first (empty = no data yet)
+  leaderTeams?: string[]  // parallel array: actual team for each leader (Q1 only)
+  stat: number            // the leading statistic value
 }
 
 // Q1: player name(s) tied for most group-stage goals
 export function q1Leaders(events: MatchEvent[], matches: Match[]): BonusLeaders {
   const scorers = groupTopScorers(events, matches)
-  if (scorers.length === 0) return { leaders: [], stat: 0 }
+  if (scorers.length === 0) return { leaders: [], leaderTeams: [], stat: 0 }
   const top = scorers[0].goals
+  const topScorers = scorers.filter(s => s.goals === top)
   return {
-    leaders: scorers.filter(s => s.goals === top).map(s => s.playerName),
+    leaders: topScorers.map(s => s.playerName),
+    leaderTeams: topScorers.map(s => s.team),
     stat: top,
   }
 }
@@ -95,24 +109,32 @@ export function computeBonusCorrectness(
   events: MatchEvent[],
   matches: Match[]
 ): DerivedGrade[] {
-  const { leaders: q1L } = q1Leaders(events, matches)
+  const { leaders: q1L, leaderTeams: q1T } = q1Leaders(events, matches)
   const { leaders: q2L } = q2Leaders(matches)
   const { leaders: q3L } = q3Leaders(matches)
 
   // Q1 leaders come from match_events (goal-scorer names); confirmed answers come
   // from the squads file. openfootball spells the same player differently across
   // the two files (case + diacritics), so compare on the normalized name key.
-  const q1Keys = new Set(q1L.map(normalizePlayerName))
+  // Build a map: normalizedPlayerName → actual team, so we can validate both.
+  const q1PlayerTeam = new Map<string, string>()
+  for (let i = 0; i < q1L.length; i++) {
+    q1PlayerTeam.set(normalizePlayerName(q1L[i]), q1T?.[i] ?? '')
+  }
 
   const results: DerivedGrade[] = []
   for (const a of answers) {
     if (a.question_id === 1) {
       const confirmed = confirmedQ1Answers.get(a.user_id)
       if (!confirmed) continue  // unmapped — not scored yet
+      const normalizedConfirmed = normalizePlayerName(confirmed)
+      const leaderTeam = q1PlayerTeam.get(normalizedConfirmed)
+      const nameMatches = q1PlayerTeam.size > 0 && q1PlayerTeam.has(normalizedConfirmed)
+      const teamMatches = leaderTeam === a.answer_team
       results.push({
         user_id: a.user_id,
         question_id: 1,
-        is_correct: q1Keys.size > 0 && q1Keys.has(normalizePlayerName(confirmed)),
+        is_correct: nameMatches && teamMatches,
       })
     } else if (a.question_id === 2) {
       results.push({

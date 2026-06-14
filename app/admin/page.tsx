@@ -61,7 +61,7 @@ export default async function AdminPage() {
   const derivedQ1 = q1Leaders(eventList, all)
   const groupComplete = isGroupStageComplete(all)
 
-  const derivedLeaders: Record<number, { leaders: string[]; stat: number; statLabel: string }> = {
+  const derivedLeaders: Record<number, { leaders: string[]; leaderTeams?: string[]; stat: number; statLabel: string }> = {
     1: { ...derivedQ1, statLabel: 'goal' },
     2: { ...derivedQ2, statLabel: 'goals scored' },
     3: { ...derivedQ3, statLabel: 'goals conceded' },
@@ -175,7 +175,13 @@ export default async function AdminPage() {
                     {qLeadInfo.leaders.length > 0 && (
                       <span className="text-xs text-gray-500 shrink-0">
                         {groupComplete ? 'Winner:' : 'Leader:'}{' '}
-                        <span className="font-medium text-gray-700">{qLeadInfo.leaders.join(', ')}</span>
+                        <span className="font-medium text-gray-700">
+                          {q.type === 'player' && qLeadInfo.leaderTeams
+                            ? qLeadInfo.leaders.map((l, i) =>
+                                `${l} (${teamDisplay(qLeadInfo.leaderTeams![i], qLeadInfo.leaderTeams![i])})`
+                              ).join(', ')
+                            : qLeadInfo.leaders.join(', ')}
+                        </span>
                         {' '}· {qLeadInfo.stat} {qLeadInfo.statLabel}
                         {!groupComplete && <span className="text-amber-500 ml-1">(provisional)</span>}
                       </span>

@@ -14,9 +14,10 @@ import type { Match, MatchEvent, BonusAnswer } from '../lib/types'
 function event(
   match_id: number,
   player_name: string,
-  type: 'goal' | 'own_goal' | 'penalty' = 'goal'
+  type: 'goal' | 'own_goal' | 'penalty' = 'goal',
+  team: 'home' | 'away' = 'home'
 ): MatchEvent {
-  return { id: match_id * 100, match_id, minute: null, extra_time: null, type, team: 'home', player_name, assist_name: null }
+  return { id: match_id * 100, match_id, minute: null, extra_time: null, type, team, player_name, assist_name: null }
 }
 
 function groupMatch(id: number, homeScore: number | null, awayScore: number | null, ht = 'A', at = 'B'): Match {
@@ -40,8 +41,9 @@ describe('groupTopScorers', () => {
       event(1, 'Messi'), event(1, 'Messi'), event(2, 'Ronaldo'),
     ]
     const result = groupTopScorers(events, matches)
-    expect(result[0]).toEqual({ playerName: 'Messi', goals: 2 })
-    expect(result[1]).toEqual({ playerName: 'Ronaldo', goals: 1 })
+    // Both events default to team: 'home'; default groupMatch home_team is 'A'
+    expect(result[0]).toEqual({ playerName: 'Messi', goals: 2, team: 'A' })
+    expect(result[1]).toEqual({ playerName: 'Ronaldo', goals: 1, team: 'A' })
   })
 
   it('excludes own goals from the scorer tally', () => {
@@ -88,7 +90,7 @@ describe('q1Leaders', () => {
   })
 
   it('returns empty leaders when no events', () => {
-    expect(q1Leaders([], [groupMatch(1, 1, 0)])).toEqual({ leaders: [], stat: 0 })
+    expect(q1Leaders([], [groupMatch(1, 1, 0)])).toEqual({ leaders: [], leaderTeams: [], stat: 0 })
   })
 })
 
@@ -287,13 +289,14 @@ describe('computeBonusCorrectness', () => {
     })
 
     it('marks all tied top scorers as correct', () => {
-      const tiedEvents = [event(1, 'A'), event(1, 'B')]
+      // A scores for Brazil (home), B scores for France (away) — both on 1 goal
+      const tiedEvents = [event(1, 'A', 'goal', 'home'), event(1, 'B', 'goal', 'away')]
       const confirmed = new Map([['u1', 'A'], ['u2', 'B']])
       const grades = computeBonusCorrectness(
-        [answer('u1', 1, 'X', 'a'), answer('u2', 1, 'Y', 'b')],
+        [answer('u1', 1, 'Brazil', 'a'), answer('u2', 1, 'France', 'b')],
         confirmed,
         tiedEvents,
-        matches
+        matches  // match 1 = Brazil vs France
       )
       expect(grades.every(g => g.is_correct)).toBe(true)
     })
@@ -303,22 +306,26 @@ describe('computeBonusCorrectness', () => {
     // the confirmed squad name must match despite case/diacritic differences.
     it('matches confirmed name to goal scorer despite case differences', () => {
       // goal event "Hwang In-Beom" vs squad "Hwang In-beom"
+      // use a match where South Korea is the home team so e.team='home' resolves correctly
+      const skMatch = groupMatch(1, 2, 0, 'South Korea', 'Japan')
       const evs = [event(1, 'Hwang In-Beom'), event(1, 'Hwang In-Beom')]
       const confirmed = new Map([['u1', 'Hwang In-beom']])
       const grades = computeBonusCorrectness(
         [answer('u1', 1, 'South Korea', 'hwang')],
-        confirmed, evs, matches
+        confirmed, evs, [skMatch]
       )
       expect(grades[0].is_correct).toBe(true)
     })
 
     it('matches confirmed name to goal scorer despite diacritic differences', () => {
       // goal event "Ladislav Krejcí" vs squad "Ladislav Krejčí"
+      // use a match where Czechia is the home team
+      const czMatch = groupMatch(1, 2, 0, 'Czechia', 'Slovakia')
       const evs = [event(1, 'Ladislav Krejcí'), event(1, 'Ladislav Krejcí')]
       const confirmed = new Map([['u1', 'Ladislav Krejčí']])
       const grades = computeBonusCorrectness(
         [answer('u1', 1, 'Czechia', 'krejci')],
-        confirmed, evs, matches
+        confirmed, evs, [czMatch]
       )
       expect(grades[0].is_correct).toBe(true)
     })

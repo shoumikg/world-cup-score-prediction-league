@@ -74,7 +74,7 @@ export default async function BonusPage() {
   const tracker3 = q3Leaders(matchesForTracker)
   const groupComplete = isGroupStageComplete(matchesForTracker)
 
-  const trackerByQ: Record<number, { leaders: string[]; stat: number; statLabel: string; isComplete: boolean }> = {
+  const trackerByQ: Record<number, { leaders: string[]; leaderTeams?: string[]; stat: number; statLabel: string; isComplete: boolean }> = {
     1: { ...tracker1, statLabel: 'goal', isComplete: groupComplete },
     2: { ...tracker2, statLabel: 'goals scored', isComplete: groupComplete },
     3: { ...tracker3, statLabel: 'goals conceded', isComplete: groupComplete },
