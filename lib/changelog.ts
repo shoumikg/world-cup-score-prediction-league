@@ -38,6 +38,26 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
       'Live tracker on the Bonus page shows current leaders and each participant\'s pick status (Leading, Correct, Behind, or Pending).',
     ],
   },
+  {
+    id: 4,
+    date: '2026-06-14',
+    title: 'Live matches page',
+    items: [
+      'New Live page shows every match that\'s in progress right now, with the running score and minute.',
+      'A pulsing green Live pill appears in the nav whenever matches are underway, and disappears when none are live.',
+      'The page refreshes on its own, so scores and newly-started matches show up without a manual reload.',
+    ],
+  },
+  {
+    id: 5,
+    date: '2026-06-14',
+    title: 'My Stats page',
+    items: [
+      'New My Stats page with your current rank, total points, and a breakdown of your prediction outcomes.',
+      'A points-over-time chart tracks how your score has grown, with each result coloured by how close your pick was.',
+      'See your accuracy split across group and knockout stages, your bonus-answer status, and a full history of every match you predicted.',
+    ],
+  },
 ]
 
 export const LATEST_CHANGELOG_ID = Math.max(0, ...CHANGELOG.map(e => e.id))
