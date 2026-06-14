@@ -39,15 +39,18 @@ export default async function RootLayout({
   let profile = null;
   let unseenCount = 0;
   let unseenForModal: ReturnType<typeof unseenEntries> = [];
+  let hasLive = false;
   if (user) {
-    const [{ data: profileData }, { data: readRow }] = await Promise.all([
+    const [{ data: profileData }, { data: readRow }, { data: liveMatches }] = await Promise.all([
       supabase.from("profiles").select("username, is_admin").eq("id", user.id).single(),
       supabase.from("whats_new_reads").select("seen_id").eq("user_id", user.id).single(),
+      supabase.from("matches").select("id").eq("status", "live").limit(1),
     ]);
     profile = profileData;
     const seenId = readRow?.seen_id ?? 0;
     unseenForModal = unseenEntries(seenId);
     unseenCount = unseenForModal.length;
+    hasLive = (liveMatches?.length ?? 0) > 0;
   }
 
   return (
@@ -80,6 +83,11 @@ export default async function RootLayout({
               {/* Row 2: nav links — flex-wrap so future items spill to a new line */}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pb-2 text-sm">
                 <a href="/" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Schedule</a>
+                {hasLive && (
+                  <a href="/live" className="animate-pulse bg-green-500 text-white text-xs font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap">
+                    Live
+                  </a>
+                )}
                 <a href="/leaderboard" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Leaderboard</a>
                 <a href="/groups" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Groups</a>
                 <a href="/guide" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Guide</a>
