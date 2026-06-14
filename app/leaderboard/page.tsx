@@ -64,11 +64,20 @@ export default async function LeaderboardPage() {
   const hasLive = allMatches.some(m => m.status === 'live')
   const liveInfo = new Map<string, { movement: number; inPlay: number }>()
   if (hasLive) {
+    const finishedMatches = allMatches.filter(m => m.status !== 'live')
+    const liveMatchIds = new Set(allMatches.filter(m => m.status === 'live').map(m => m.id))
+    const finishedEvents = (events ?? [] as MatchEvent[]).filter((e: MatchEvent) => !liveMatchIds.has(e.match_id))
+    const baseDerivedGrades = computeBonusCorrectness(
+      (bonusAnswers ?? []) as BonusAnswer[],
+      confirmedQ1,
+      finishedEvents as MatchEvent[],
+      finishedMatches
+    )
     const baselineRows = computeLeaderboard(
       playerProfiles,
       (preds ?? []) as Prediction[],
-      allMatches.filter(m => m.status !== 'live'),
-      derivedGrades
+      finishedMatches,
+      baseDerivedGrades
     )
     const baseline = new Map(baselineRows.map(r => [r.userId, r]))
     for (const r of rows) {

@@ -85,9 +85,11 @@ export default async function MePage() {
   let myInPlay = 0
   let myMovement = 0
   if (hasLive && myRow) {
-    const baseLb = computeLeaderboard(
-      playerProfiles, allPreds, allMatches.filter(m => m.status !== 'live'), allDerivedGrades
-    )
+    const finishedMatches = allMatches.filter(m => m.status !== 'live')
+    const liveMatchIds = new Set(allMatches.filter(m => m.status === 'live').map(m => m.id))
+    const finishedEvents = events.filter(e => !liveMatchIds.has(e.match_id))
+    const baseDerivedGrades = computeBonusCorrectness(allBonusAns, confirmedQ1, finishedEvents, finishedMatches)
+    const baseLb = computeLeaderboard(playerProfiles, allPreds, finishedMatches, baseDerivedGrades)
     const myBase = baseLb.find(r => r.userId === user.id)
     if (myBase) {
       myInPlay = myRow.total - myBase.total
