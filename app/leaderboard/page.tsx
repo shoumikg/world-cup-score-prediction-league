@@ -10,12 +10,15 @@ import type { LeaderboardProfile } from '@/lib/leaderboard'
 export const dynamic = 'force-dynamic'
 
 export default async function LeaderboardPage(props: {
-  searchParams: Promise<{ bonus?: string }>
+  searchParams: Promise<{ bonus?: string; live?: string }>
 }) {
-  const { bonus: bonusParam } = await props.searchParams
-  // Default: bonus points count toward the standings. ?bonus=off ranks on
-  // match points only (the Bonus column is hidden). View-only — no data changes.
+  const { bonus: bonusParam, live: liveParam } = await props.searchParams
+  // Three view modes (view-only — no data changes):
+  //   default        → live scores + bonus
+  //   ?bonus=off     → live scores, match points only
+  //   ?live=off      → settled (finished matches only, no bonus)
   const showBonus = bonusParam !== 'off'
+  const showLive = liveParam !== 'off'
 
   const supabase = await createClient()
 
@@ -58,17 +61,21 @@ export default async function LeaderboardPage(props: {
   type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
   const playerProfiles = ((profiles ?? []) as ProfileRow[]).filter(p => !p.is_admin)
 
+  // Settled mode: exclude in-progress matches entirely; bonus always off (bonus
+  // derives from live event data, so it can't be consistent without live scores).
+  const baseMatches = showLive ? allMatches : allMatches.filter(m => m.status !== 'live')
+
   const rows = computeLeaderboard(
     playerProfiles,
     (preds ?? []) as Prediction[],
-    allMatches,
-    showBonus ? derivedGrades : []
+    baseMatches,
+    (showBonus && showLive) ? derivedGrades : []
   )
 
   // While a match is in progress the standings above already fold in live
   // scores. Diff them against a finished-only baseline so we can show how each
   // player is *projected* to move and how many of their points are still in play.
-  const hasLive = allMatches.some(m => m.status === 'live')
+  const hasLive = showLive && allMatches.some(m => m.status === 'live')
   const liveInfo = new Map<string, { movement: number; inPlay: number }>()
   if (hasLive) {
     const finishedMatches = allMatches.filter(m => m.status !== 'live')
@@ -122,18 +129,26 @@ export default async function LeaderboardPage(props: {
         <a
           href="/leaderboard"
           className={`px-3 py-1.5 rounded-md transition-colors ${
-            showBonus ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+            showLive && showBonus ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
           }`}
         >
-          Incl. bonus
+          Live + Bonus
         </a>
         <a
           href="/leaderboard?bonus=off"
           className={`px-3 py-1.5 rounded-md transition-colors ${
-            !showBonus ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+            showLive && !showBonus ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
           }`}
         >
-          Match points only
+          Match pts only
+        </a>
+        <a
+          href="/leaderboard?live=off"
+          className={`px-3 py-1.5 rounded-md transition-colors ${
+            !showLive ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Settled
         </a>
       </div>
 
@@ -156,7 +171,7 @@ export default async function LeaderboardPage(props: {
               <th className="font-medium w-14 py-2">GD</th>
               <th className="font-medium w-14 py-2">Result</th>
               <th className="font-medium w-14 py-2">Wrong</th>
-              {showBonus && <th className="font-medium w-14 py-2">Bonus</th>}
+              {showBonus && showLive && <th className="font-medium w-14 py-2">Bonus</th>}
               <th className="font-medium w-14 pr-3 py-2">Pts</th>
             </tr>
           </thead>
@@ -221,7 +236,7 @@ export default async function LeaderboardPage(props: {
                     {r.wrong}
                   </span>
                 </td>
-                {showBonus && (
+                {showBonus && showLive && (
                   <td className="text-center py-2.5">
                     <span className="inline-block w-8 px-1 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold text-xs">
                       {r.bonusPoints}
@@ -245,9 +260,11 @@ export default async function LeaderboardPage(props: {
 
       <p className="text-xs text-gray-400 mt-3">
         Exact/GD/Result = 10/5/3 group · 15/8/5 knockout pts ·
-        {showBonus
-          ? <> Bonus = auto-scored from live standings{!groupComplete ? ' (provisional until group stage ends)' : ''} · </>
-          : <> Bonus points excluded · </>}
+        {!showLive
+          ? <> Settled — live matches excluded · Bonus excluded · </>
+          : showBonus
+            ? <> Bonus = auto-scored from live standings{!groupComplete ? ' (provisional until group stage ends)' : ''} · </>
+            : <> Bonus points excluded · </>}
         Missed predictions don't count against you.
       </p>
     </div>
