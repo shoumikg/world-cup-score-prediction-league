@@ -7,6 +7,7 @@ import { computeLeaderboard } from '@/lib/leaderboard'
 import { computeBonusCorrectness } from '@/lib/bonusTracker'
 import { GROUP_BONUS_QUESTIONS } from '@/lib/bonus'
 import { TeamLink } from '@/app/TeamLink'
+import { LiveRefresh } from '@/app/LiveRefresh'
 import type { Match, Prediction, BonusGrade, BonusAnswer, MatchEvent } from '@/lib/types'
 import type { Outcome } from '@/lib/scoring'
 
@@ -77,6 +78,23 @@ export default async function MePage() {
   const leaderboard = computeLeaderboard(playerProfiles, allPreds, allMatches, allDerivedGrades)
   const myRow = leaderboard.find(r => r.userId === user.id)
 
+  // While a match is live my total/rank above already fold in the in-progress
+  // score. Diff against a finished-only baseline to surface how many of my
+  // points are still provisional and where I'm projected to land.
+  const hasLive = allMatches.some(m => m.status === 'live')
+  let myInPlay = 0
+  let myMovement = 0
+  if (hasLive && myRow) {
+    const baseLb = computeLeaderboard(
+      playerProfiles, allPreds, allMatches.filter(m => m.status !== 'live'), allDerivedGrades
+    )
+    const myBase = baseLb.find(r => r.userId === user.id)
+    if (myBase) {
+      myInPlay = myRow.total - myBase.total
+      myMovement = myBase.rank - myRow.rank
+    }
+  }
+
   // My bonus data for display
   const myGradeMap = new Map<number, boolean>()
   for (const g of allDerivedGrades.filter(g => g.user_id === user.id)) {
@@ -110,6 +128,16 @@ export default async function MePage() {
   for (const sp of scoredPreds) c[sp.outcome]++
   const totalScored = scoredPreds.length
 
+  // Live matches count as scored (they have a score) but aren't final — split
+  // them out so the header reads honestly: N final · N live · N pending.
+  const liveCount = scoredPreds.filter(sp => sp.match.status === 'live').length
+  const finalCount = totalScored - liveCount
+  const summaryParts: string[] = []
+  if (finalCount > 0) summaryParts.push(`${finalCount} final`)
+  if (liveCount > 0) summaryParts.push(`${liveCount} live`)
+  if (pendingCount > 0) summaryParts.push(`${pendingCount} pending`)
+  const summary = summaryParts.length > 0 ? summaryParts.join(' · ') : 'No results in yet'
+
   // Stage breakdown
   const gs = { exact: 0, correct_gd: 0, correct: 0, wrong: 0, pts: 0, n: 0 }
   const ks = { exact: 0, correct_gd: 0, correct: 0, wrong: 0, pts: 0, n: 0 }
@@ -131,6 +159,7 @@ export default async function MePage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+      <LiveRefresh hasLive={hasLive} />
 
       {/* Hero */}
       <div className="bg-white rounded-xl border shadow-sm p-5">
@@ -140,16 +169,22 @@ export default async function MePage() {
               {teamFlag(me.favorite_team) && <span>{teamFlag(me.favorite_team)}</span>}
               {me.display_name}
             </h1>
-            <p className="text-sm text-gray-500 mt-0.5">
-              {totalScored === 0
-                ? 'No results in yet'
-                : `${totalScored} scored${pendingCount > 0 ? ` · ${pendingCount} pending` : ''}`}
-            </p>
+            <p className="text-sm text-gray-500 mt-0.5">{summary}</p>
           </div>
           {myRow && (
             <div className="text-right shrink-0">
               <div className="text-3xl font-bold text-gray-900 leading-none">{myRow.total}</div>
-              <div className="text-xs text-gray-400 mt-1">pts · #{myRow.rank} of {leaderboard.length}</div>
+              <div className="text-xs text-gray-400 mt-1">
+                pts · #{myRow.rank} of {leaderboard.length}
+                {myMovement !== 0 && (
+                  <span className={`ml-1 font-semibold ${myMovement > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                    {myMovement > 0 ? `▲${myMovement}` : `▼${-myMovement}`}
+                  </span>
+                )}
+              </div>
+              {hasLive && myInPlay > 0 && (
+                <div className="text-[11px] font-semibold text-amber-600 mt-0.5">⚡ +{myInPlay} in play</div>
+              )}
             </div>
           )}
         </div>
@@ -224,18 +259,31 @@ export default async function MePage() {
                 strokeLinecap="round"
               />
             )}
-            {/* Dots */}
-            {timeline.map((p, i) => (
-              <circle
-                key={i}
-                cx={toX(i).toFixed(1)}
-                cy={toY(p.cumPts).toFixed(1)}
-                r="3.5"
-                fill={OUTCOME_DOT[p.outcome]}
-                stroke="white"
-                strokeWidth="1.5"
-              />
-            ))}
+            {/* Dots — live matches drawn hollow with a pulsing ring (not final yet) */}
+            {timeline.map((p, i) => {
+              const live = p.match.status === 'live'
+              const cx = toX(i).toFixed(1)
+              const cy = toY(p.cumPts).toFixed(1)
+              return live ? (
+                <g key={i}>
+                  <circle cx={cx} cy={cy} r="3.5" fill="white" stroke={OUTCOME_DOT[p.outcome]} strokeWidth="2" />
+                  <circle cx={cx} cy={cy} r="3.5" fill="none" stroke={OUTCOME_DOT[p.outcome]} strokeWidth="1.5">
+                    <animate attributeName="r" values="3.5;7" dur="1.2s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.6;0" dur="1.2s" repeatCount="indefinite" />
+                  </circle>
+                </g>
+              ) : (
+                <circle
+                  key={i}
+                  cx={cx}
+                  cy={cy}
+                  r="3.5"
+                  fill={OUTCOME_DOT[p.outcome]}
+                  stroke="white"
+                  strokeWidth="1.5"
+                />
+              )
+            })}
             {/* Final total label */}
             <text
               x={toX(n - 1).toFixed(1)}
@@ -256,6 +304,7 @@ export default async function MePage() {
               <span className="inline-block w-2 h-2 rounded-full bg-amber-400 ml-1" /> Result
               <span className="inline-block w-2 h-2 rounded-full bg-red-400 ml-1" /> Wrong
             </span>
+            {liveCount > 0 && <span className="ml-2 text-amber-600">· hollow dot = live (provisional)</span>}
           </p>
         </div>
       )}
