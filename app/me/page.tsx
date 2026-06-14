@@ -82,17 +82,15 @@ export default async function MePage() {
   // score. Diff against a finished-only baseline to surface how many of my
   // points are still provisional and where I'm projected to land.
   const hasLive = allMatches.some(m => m.status === 'live')
-  let myInPlay = 0
   let myMovement = 0
   if (hasLive && myRow) {
-    const baseLb = computeLeaderboard(
-      playerProfiles, allPreds, allMatches.filter(m => m.status !== 'live'), allDerivedGrades
-    )
+    const finishedMatches = allMatches.filter(m => m.status !== 'live')
+    const liveMatchIds = new Set(allMatches.filter(m => m.status === 'live').map(m => m.id))
+    const finishedEvents = events.filter(e => !liveMatchIds.has(e.match_id))
+    const baseDerivedGrades = computeBonusCorrectness(allBonusAns, confirmedQ1, finishedEvents, finishedMatches)
+    const baseLb = computeLeaderboard(playerProfiles, allPreds, finishedMatches, baseDerivedGrades)
     const myBase = baseLb.find(r => r.userId === user.id)
-    if (myBase) {
-      myInPlay = myRow.total - myBase.total
-      myMovement = myBase.rank - myRow.rank
-    }
+    if (myBase) myMovement = myBase.rank - myRow.rank
   }
 
   // My bonus data for display
@@ -132,6 +130,12 @@ export default async function MePage() {
   // them out so the header reads honestly: N final · N live · N pending.
   const liveCount = scoredPreds.filter(sp => sp.match.status === 'live').length
   const finalCount = totalScored - liveCount
+  // Points in play = my match points from games currently in progress (always
+  // ≥ 0, consistent with the /live page and leaderboard). Bonus swings surface
+  // via the projected rank arrow, not here.
+  const myInPlay = scoredPreds
+    .filter(sp => sp.match.status === 'live')
+    .reduce((s, sp) => s + sp.pts, 0)
   const summaryParts: string[] = []
   if (finalCount > 0) summaryParts.push(`${finalCount} final`)
   if (liveCount > 0) summaryParts.push(`${liveCount} live`)

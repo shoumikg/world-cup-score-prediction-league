@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { computeLeaderboard } from '@/lib/leaderboard'
 import { computeBonusCorrectness, isGroupStageComplete } from '@/lib/bonusTracker'
 import { teamFlag } from '@/lib/flags'
-import { OUTCOME_CLASSES } from '@/lib/scoring'
+import { OUTCOME_CLASSES, scoreOutcome, matchPoints } from '@/lib/scoring'
 import { LiveRefresh } from '@/app/LiveRefresh'
 import type { Match, Prediction, BonusGrade, BonusAnswer, MatchEvent } from '@/lib/types'
 import type { LeaderboardProfile } from '@/lib/leaderboard'
@@ -64,17 +64,36 @@ export default async function LeaderboardPage() {
   const hasLive = allMatches.some(m => m.status === 'live')
   const liveInfo = new Map<string, { movement: number; inPlay: number }>()
   if (hasLive) {
+    const finishedMatches = allMatches.filter(m => m.status !== 'live')
+    const liveMatchById = new Map(allMatches.filter(m => m.status === 'live').map(m => [m.id, m]))
+    const finishedEvents = ((events ?? []) as MatchEvent[]).filter(e => !liveMatchById.has(e.match_id))
+    const baseDerivedGrades = computeBonusCorrectness(
+      (bonusAnswers ?? []) as BonusAnswer[],
+      confirmedQ1,
+      finishedEvents,
+      finishedMatches
+    )
     const baselineRows = computeLeaderboard(
       playerProfiles,
       (preds ?? []) as Prediction[],
-      allMatches.filter(m => m.status !== 'live'),
-      derivedGrades
+      finishedMatches,
+      baseDerivedGrades
     )
     const baseline = new Map(baselineRows.map(r => [r.userId, r]))
+    // Points in play = each player's match points from predictions on the games
+    // currently in progress (match points only → always ≥ 0, and consistent with
+    // the /live page). Bonus swings still surface through the projected rank arrow.
+    const inPlayByUser = new Map<string, number>()
+    for (const p of (preds ?? []) as Prediction[]) {
+      const m = liveMatchById.get(p.match_id)
+      if (!m) continue
+      const o = scoreOutcome(p, m)
+      if (o) inPlayByUser.set(p.user_id, (inPlayByUser.get(p.user_id) ?? 0) + matchPoints(o, m.stage))
+    }
     for (const r of rows) {
       const b = baseline.get(r.userId)
       if (!b) continue
-      liveInfo.set(r.userId, { movement: b.rank - r.rank, inPlay: r.total - b.total })
+      liveInfo.set(r.userId, { movement: b.rank - r.rank, inPlay: inPlayByUser.get(r.userId) ?? 0 })
     }
   }
 
