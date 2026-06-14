@@ -80,6 +80,10 @@ export default async function RootLayout({
               {/* Row 2: nav links — flex-wrap so future items spill to a new line */}
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pb-2 text-sm">
                 <a href="/" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Schedule</a>
+                <a href="/live" className="text-gray-600 hover:text-gray-900 whitespace-nowrap flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse shrink-0" />
+                  Live
+                </a>
                 <a href="/leaderboard" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Leaderboard</a>
                 <a href="/groups" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Groups</a>
                 <a href="/guide" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Guide</a>
