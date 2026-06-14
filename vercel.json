@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/backfill-events",
+      "schedule": "0 4 * * *"
+    }
+  ]
+}
