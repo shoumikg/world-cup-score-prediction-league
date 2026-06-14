@@ -73,7 +73,7 @@ export function MatchRow({ match, prediction, isLocked, picks, graceState, grace
       if (res.error) {
         setMsg({ text: res.error, ok: false })
         // Server says the match started (e.g. client clock is behind) — lock the row
-        if (res.error.includes('locked')) setClientLocked(true)
+        if (res.error.includes('locked') || res.error.includes('Grace period ended') || res.error.includes('kicked off')) setClientLocked(true)
       } else {
         lastSaved.current = { home: homeVal, away: awayVal }
         setMsg({ text: 'Saved!', ok: true })

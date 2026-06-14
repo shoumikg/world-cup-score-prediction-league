@@ -106,12 +106,22 @@ export async function savePrediction(
 
     // Use service-role client to bypass the deadline RLS policy
     const admin = getAdminClient()
-    const { error: saveErr } = await admin.from('predictions').upsert(
-      { user_id: user.id, match_id: matchId, home_pred: homePred, away_pred: awayPred, updated_at: now.toISOString() },
-      { onConflict: 'user_id,match_id' }
+
+    // Grace is only for MISSED predictions — block if one already exists
+    const { data: existingPred } = await admin
+      .from('predictions')
+      .select('match_id')
+      .eq('user_id', user.id)
+      .eq('match_id', matchId)
+      .maybeSingle()
+    if (existingPred) return { error: 'You already predicted this match — grace is for missed predictions only.' }
+
+    const { error: saveErr } = await admin.from('predictions').insert(
+      { user_id: user.id, match_id: matchId, home_pred: homePred, away_pred: awayPred, updated_at: now.toISOString() }
     )
     if (saveErr) return { error: 'Failed to save prediction. Please try again.' }
     revalidatePath('/')
+    revalidatePath(`/match/${matchId}`)
     return {}
   }
 
@@ -151,19 +161,33 @@ export async function invokeGrace(matchId: number): Promise<{ error?: string }> 
   if (deadline > new Date()) return { error: "Deadline hasn't passed — no need for grace." }
 
   const dayKey = istDateKey(match.kickoff_utc)
-  const { data: dayMatchesRaw } = await supabase.from('matches').select('kickoff_utc')
-  const firstKickoff = (dayMatchesRaw ?? [])
-    .filter((m: { kickoff_utc: string }) => istDateKey(m.kickoff_utc) === dayKey)
+  const { data: dayMatchesRaw } = await supabase.from('matches').select('id, kickoff_utc')
+  const dayMatches = (dayMatchesRaw ?? [])
+    .filter((m: { id: number; kickoff_utc: string }) => istDateKey(m.kickoff_utc) === dayKey)
+  const firstKickoff = dayMatches
     .reduce((min: number, m: { kickoff_utc: string }) => Math.min(min, new Date(m.kickoff_utc).getTime()), Infinity)
 
   if (Date.now() >= firstKickoff)
     return { error: 'Grace window has closed — the first match has already kicked off.' }
+
+  // Ensure at least one match on this day has no prediction (grace is for missed picks only)
+  const dayMatchIds = dayMatches.map((m: { id: number }) => m.id)
+  if (dayMatchIds.length > 0) {
+    const { data: existingPreds } = await supabase
+      .from('predictions')
+      .select('match_id')
+      .eq('user_id', user.id)
+      .in('match_id', dayMatchIds)
+    if ((existingPreds?.length ?? 0) >= dayMatchIds.length)
+      return { error: 'You already have predictions for all matches today — grace is not needed.' }
+  }
 
   const { error } = await supabase.from('profiles').update({ grace_day: dayKey }).eq('id', user.id)
   if (error) return { error: 'Failed to activate grace. Please try again.' }
 
   revalidatePath('/')
   revalidatePath('/me')
+  revalidatePath(`/match/${matchId}`)
   return {}
 }
 

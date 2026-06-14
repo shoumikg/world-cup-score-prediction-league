@@ -55,6 +55,12 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
   const userGraceDay = (userProfileRaw as { grace_day: string | null } | null)?.grace_day ?? null
   const matchDayKey = istDateKey(match.kickoff_utc)
   const graceUsedForThisDay = userGraceDay === matchDayKey
+  // Hide others' picks while the user can still submit a grace prediction.
+  // Proxy: grace window closes at the first kickoff of the day (≤ this match's
+  // kickoff), so using this match's kickoff is safe (conservative by at most
+  // the gap between first and this match's kickoff on multi-match days).
+  const inGraceWindow = graceUsedForThisDay && new Date(match.kickoff_utc) > new Date()
+  const showPicks = deadlinePassed && !inGraceWindow
   const hasResult = match.home_score !== null
 
   // Plain team labels for the aggregate pick-split chips (counts, not links).
@@ -218,8 +224,8 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
         </div>
       )}
 
-      {/* Post-deadline sections */}
-      {deadlinePassed && (
+      {/* Post-deadline sections — hidden while user is in an active grace window */}
+      {showPicks && (
         <>
           {/* Score distribution histogram */}
           {histogram.length > 0 && (

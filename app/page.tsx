@@ -167,16 +167,19 @@ export default async function SchedulePage(props: {
                       }))
                       .sort((a, b) => a.displayName.localeCompare(b.displayName))
                   : undefined
-                // Grace: active = grace invoked for this day (predictions open until first kickoff)
-                //        available = grace not yet used + deadline passed + window still open
+                // Grace only applies to matches the user hasn't predicted yet
+                const hasPred = !!predMap.get(m.id)
+                // active = grace invoked, this match has no pred, window still open
+                // available = grace not yet used, deadline passed, window open, no pred
                 const graceState: 'active' | 'available' | undefined =
-                  graceActiveForDay && now < firstKickoff ? 'active' :
-                  !userGraceDay && graceWindowOpen ? 'available' :
+                  graceActiveForDay && !hasPred && now < firstKickoff ? 'active' :
+                  !userGraceDay && graceWindowOpen && !hasPred ? 'available' :
                   undefined
-                // isLocked: grace-active rows are open until the first kickoff, not the deadline
-                const isLockedForMatch = graceActiveForDay
-                  ? now >= firstKickoff
-                  : isDeadlinePassed(m.kickoff_utc)
+                // isLocked: only grace-active rows without a pred stay open until first kickoff
+                const isLockedForMatch =
+                  graceActiveForDay && !hasPred && now < firstKickoff ? false :
+                  graceActiveForDay ? true :
+                  isDeadlinePassed(m.kickoff_utc)
                 return (
                   <div key={m.id} id={`match-${m.id}`} className="scroll-mt-28">
                     <div className="text-xs text-gray-400 pt-3 pb-1">
