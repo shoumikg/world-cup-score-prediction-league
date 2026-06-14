@@ -10,10 +10,11 @@ import type { BonusAnswer, BonusPickEntry } from '@/lib/types'
 import type { BonusQuestion } from '@/lib/bonus'
 
 interface TrackerData {
-  leaders: string[]       // canonical names tied for first
-  stat: number            // the leading statistic value
-  statLabel: string       // e.g. 'goal', 'goals scored', 'goals conceded'
-  isComplete: boolean     // group stage finished?
+  leaders: string[]        // canonical names tied for first
+  leaderTeams?: string[]   // parallel array: actual team per leader (Q1 only)
+  stat: number             // the leading statistic value
+  statLabel: string        // e.g. 'goal', 'goals scored', 'goals conceded'
+  isComplete: boolean      // group stage finished?
 }
 
 type PickStatus = 'leading' | 'correct' | 'behind' | 'unmapped' | 'no_data'
@@ -21,7 +22,9 @@ type PickStatus = 'leading' | 'correct' | 'behind' | 'unmapped' | 'no_data'
 function pickStatus(
   effectiveAnswer: string | null | undefined,
   leaders: string[],
-  isComplete: boolean
+  isComplete: boolean,
+  answerTeam?: string,
+  leaderTeams?: string[]
 ): PickStatus {
   if (!effectiveAnswer) return 'unmapped'
   if (leaders.length === 0) return 'no_data'
@@ -29,7 +32,14 @@ function pickStatus(
   // The two openfootball files disagree on case/diacritics, so compare on the
   // normalized key (a no-op for Q2/Q3 team names, which share one DB source).
   const key = normalizePlayerName(effectiveAnswer)
-  const isTop = leaders.some(l => normalizePlayerName(l) === key)
+  let isTop: boolean
+  if (answerTeam !== undefined && leaderTeams && leaderTeams.length === leaders.length) {
+    // Q1: require both player name AND team to match
+    const idx = leaders.findIndex(l => normalizePlayerName(l) === key)
+    isTop = idx >= 0 && leaderTeams[idx] === answerTeam
+  } else {
+    isTop = leaders.some(l => normalizePlayerName(l) === key)
+  }
   if (isComplete) return isTop ? 'correct' : 'behind'
   return isTop ? 'leading' : 'behind'
 }
@@ -126,7 +136,13 @@ export function BonusQuestionCard({
     : displayAnswer?.team
 
   const ownStatus: PickStatus | null = locked && tracker && tracker.leaders.length > 0
-    ? pickStatus(ownEffective, tracker.leaders, tracker.isComplete)
+    ? pickStatus(
+        ownEffective,
+        tracker.leaders,
+        tracker.isComplete,
+        question.type === 'player' ? (ownAnswer?.answer_team ?? displayAnswer?.team) : undefined,
+        question.type === 'player' ? tracker.leaderTeams : undefined,
+      )
     : null
 
   return (
@@ -145,7 +161,11 @@ export function BonusQuestionCard({
             <span className="text-gray-400">No data yet</span>
           ) : (
             <span className="text-gray-700">
-              {tracker.leaders.join(', ')}
+              {question.type === 'player' && tracker.leaderTeams
+                ? tracker.leaders.map((name, i) =>
+                    `${name} (${teamDisplay(tracker.leaderTeams![i], tracker.leaderTeams![i])})`
+                  ).join(', ')
+                : tracker.leaders.map(t => teamDisplay(t, t)).join(', ')}
               {' '}
               <span className="text-gray-500">
                 · {tracker.stat} {tracker.stat === 1 && tracker.statLabel === 'goal' ? 'goal' : tracker.statLabel}
@@ -238,7 +258,13 @@ export function BonusQuestionCard({
                 ? entry.confirmedAnswer
                 : entry.answer?.team
               const entryStatus = tracker && tracker.leaders.length > 0 && entry.answer
-                ? pickStatus(effectiveKey, tracker.leaders, tracker.isComplete)
+                ? pickStatus(
+                    effectiveKey,
+                    tracker.leaders,
+                    tracker.isComplete,
+                    question.type === 'player' ? (entry.answer?.team ?? undefined) : undefined,
+                    question.type === 'player' ? tracker.leaderTeams : undefined,
+                  )
                 : null
               const chip = entryStatus ? STATUS_CHIP[entryStatus] : null
 

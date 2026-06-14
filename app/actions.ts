@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { getAdminClient } from '@/lib/supabase/admin'
 import { validateFeedback } from '@/lib/feedback'
 import { validateDisplayName, validateFavoriteTeam } from '@/lib/profile'
 import { predictionDeadlineUTC } from '@/lib/time'
@@ -10,6 +11,7 @@ import { validateBonusAnswer, validateBonusGrade } from '@/lib/bonus'
 import { LATEST_CHANGELOG_ID } from '@/lib/changelog'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // ── Auth ──────────────────────────────────────────────────────
 
@@ -325,6 +327,66 @@ export async function saveBonusGrade(
   }
 
   revalidatePath('/admin')
+  revalidatePath('/leaderboard')
+  return {}
+}
+
+// Admin override: record a bonus answer on behalf of a player who missed the
+// deadline. The bonus_answers RLS allows only self-writes before the deadline,
+// so this intentionally goes through the service-role client to bypass both the
+// ownership and deadline gates. User-facing RLS is left untouched; this is the
+// one privileged path, gated by the admin check below (defense in depth on top
+// of the service-role key being server-only).
+export async function adminSaveBonusAnswer(
+  targetUserId: string,
+  questionId: number,
+  rawText: string | null,
+  rawTeam: string
+): Promise<{ error?: string }> {
+  const result = validateBonusAnswer(questionId, rawText, rawTeam)
+  if ('error' in result) return { error: result.error }
+
+  if (typeof targetUserId !== 'string' || !UUID_RE.test(targetUserId))
+    return { error: 'Invalid user.' }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile?.is_admin) return { error: 'Unauthorized.' }
+
+  // Confirm the target is a real, non-admin player before writing on their behalf.
+  const { data: target } = await supabase
+    .from('profiles')
+    .select('id, is_admin')
+    .eq('id', targetUserId)
+    .single()
+
+  if (!target) return { error: 'That player does not exist.' }
+  if (target.is_admin) return { error: 'Cannot add an answer for an admin account.' }
+
+  const db = getAdminClient()
+  const { error } = await db.from('bonus_answers').upsert(
+    {
+      user_id: targetUserId,
+      question_id: questionId,
+      answer_text: result.answer.text,
+      answer_team: result.answer.team,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id,question_id' }
+  )
+
+  if (error) return { error: 'Failed to save answer. Please try again.' }
+
+  revalidatePath('/admin')
+  revalidatePath('/bonus')
   revalidatePath('/leaderboard')
   return {}
 }
