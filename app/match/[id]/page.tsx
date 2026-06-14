@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { formatKickoffIST, isDeadlinePassed, predictionDeadlineUTC } from '@/lib/time'
+import { formatKickoffIST, isDeadlinePassed, predictionDeadlineUTC, istDateKey } from '@/lib/time'
 import { teamDisplay, teamFlag } from '@/lib/flags'
 import { TeamLink } from '@/app/TeamLink'
 import { scoreColor, scoreOutcome, stageLabel, OUTCOME_CLASSES } from '@/lib/scoring'
@@ -33,11 +33,12 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
 
-  const [{ data: matchRaw }, { data: predsRaw }, { data: profilesRaw }, { data: eventsRaw }] = await Promise.all([
+  const [{ data: matchRaw }, { data: predsRaw }, { data: profilesRaw }, { data: eventsRaw }, { data: userProfileRaw }] = await Promise.all([
     supabase.from('matches').select('*').eq('id', matchId).single(),
     supabase.from('predictions').select('*').eq('match_id', matchId),
     supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
     supabase.from('match_events').select('*').eq('match_id', matchId).order('minute').order('extra_time'),
+    supabase.from('profiles').select('grace_day').eq('id', user.id).single(),
   ])
 
   if (!matchRaw) notFound()
@@ -51,6 +52,9 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
   const deadlinePassed = isDeadlinePassed(match.kickoff_utc)
   const deadline = predictionDeadlineUTC(match.kickoff_utc)
   const ownPred = preds.find(p => p.user_id === user.id)
+  const userGraceDay = (userProfileRaw as { grace_day: string | null } | null)?.grace_day ?? null
+  const matchDayKey = istDateKey(match.kickoff_utc)
+  const graceUsedForThisDay = userGraceDay === matchDayKey
   const hasResult = match.home_score !== null
 
   // Plain team labels for the aggregate pick-split chips (counts, not links).
@@ -148,6 +152,11 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
         </div>
         <div className="border-t pt-3 flex items-center gap-2 flex-wrap">
           <span className="text-xs text-gray-400 shrink-0">Your pick</span>
+          {graceUsedForThisDay && (
+            <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded shrink-0">
+              Grace used
+            </span>
+          )}
           {ownPred ? (
             <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
               hasResult ? scoreColor(ownPred, match) : 'bg-gray-100 text-gray-700'

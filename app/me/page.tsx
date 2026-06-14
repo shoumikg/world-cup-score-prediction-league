@@ -41,7 +41,7 @@ export default async function MePage() {
     { data: allGradesRaw },
     { data: allProfilesRaw },
   ] = await Promise.all([
-    supabase.from('profiles').select('id, display_name, favorite_team, is_admin').eq('id', user.id).single(),
+    supabase.from('profiles').select('id, display_name, favorite_team, is_admin, grace_day').eq('id', user.id).single(),
     supabase.from('matches').select('*').order('kickoff_utc'),
     supabase.from('predictions').select('*').eq('user_id', user.id),
     supabase.from('bonus_answers').select('*').eq('user_id', user.id),
@@ -52,7 +52,7 @@ export default async function MePage() {
     supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
   ])
 
-  type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
+  type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null; grace_day: string | null }
   const me = profileData as ProfileRow | null
   if (!me) redirect('/login')
 
@@ -144,6 +144,12 @@ export default async function MePage() {
               {totalScored === 0
                 ? 'No results in yet'
                 : `${totalScored} scored${pendingCount > 0 ? ` · ${pendingCount} pending` : ''}`}
+            </p>
+            <p className="text-xs mt-1">
+              {me.grace_day
+                ? <span className="text-amber-700 font-medium">⏰ Grace used · {me.grace_day}</span>
+                : <span className="text-gray-400">Grace option available (1 remaining)</span>
+              }
             </p>
           </div>
           {myRow && (

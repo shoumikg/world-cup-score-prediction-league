@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition, useRef, useEffect } from 'react'
-import { savePrediction } from '@/app/actions'
+import { savePrediction, invokeGrace } from '@/app/actions'
 import { stageLabel, scoreColor } from '@/lib/scoring'
 import { teamDisplay } from '@/lib/flags'
 import { kickoffTimerDelay, predictionDeadlineUTC } from '@/lib/time'
@@ -12,30 +12,38 @@ interface Props {
   prediction: Prediction | undefined
   isLocked: boolean
   picks?: PickEntry[]
+  /** 'available' = grace can be invoked; 'active' = grace invoked, predictions open until graceUntil */
+  graceState?: 'available' | 'active'
+  /** ISO timestamp of first kickoff of the day — used as lock time when grace is active */
+  graceUntil?: string
 }
 
-export function MatchRow({ match, prediction, isLocked, picks }: Props) {
+export function MatchRow({ match, prediction, isLocked, picks, graceState, graceUntil }: Props) {
   const homeName = teamDisplay(match.home_team, match.home_source ?? 'TBD')
   const awayName = teamDisplay(match.away_team, match.away_source ?? 'TBD')
 
   const deadlineISO = predictionDeadlineUTC(match.kickoff_utc).toISOString()
+  // When grace is active, lock at the first kickoff of the day rather than at the deadline
+  const lockISO = graceState === 'active' && graceUntil ? graceUntil : deadlineISO
 
   const [homeVal, setHomeVal] = useState(prediction?.home_pred ?? 0)
   const [awayVal, setAwayVal] = useState(prediction?.away_pred ?? 0)
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [graceIsPending, startGraceTransition] = useTransition()
+  const [graceMsg, setGraceMsg] = useState<string | null>(null)
   const lastSaved = useRef<{ home: number | null; away: number | null }>({
     home: prediction?.home_pred ?? null,
     away: prediction?.away_pred ?? null,
   })
 
   // The server-rendered isLocked is frozen at page load; flip the row at the
-  // 9 PM IST deadline even if the tab stays open. Client clock is a UX hint
-  // only — the server action and RLS remain the authority.
+  // lock time (deadline normally; first kickoff when grace is active) even if
+  // the tab stays open. Client clock is a UX hint only.
   const [clientLocked, setClientLocked] = useState(false)
   useEffect(() => {
     if (isLocked) return
-    const delay = kickoffTimerDelay(deadlineISO)
+    const delay = kickoffTimerDelay(lockISO)
     if (delay === 'past') {
       setClientLocked(true)
       return
@@ -43,13 +51,20 @@ export function MatchRow({ match, prediction, isLocked, picks }: Props) {
     if (delay === null) return
     const t = setTimeout(() => setClientLocked(true), delay)
     return () => clearTimeout(t)
-  }, [isLocked, deadlineISO])
+  }, [isLocked, lockISO])
 
   const locked = isLocked || clientLocked
 
+  function handleInvokeGrace() {
+    setGraceMsg(null)
+    startGraceTransition(async () => {
+      const res = await invokeGrace(match.id)
+      if (res.error) setGraceMsg(res.error)
+    })
+  }
 
   function handleSave() {
-    if (kickoffTimerDelay(deadlineISO) === 'past') {
+    if (kickoffTimerDelay(lockISO) === 'past') {
       setClientLocked(true)
       return
     }
@@ -196,6 +211,11 @@ export function MatchRow({ match, prediction, isLocked, picks }: Props) {
               >
                 {isPending ? '…' : 'Save'}
               </button>
+              {graceState === 'active' && (
+                <span className="text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                  Grace
+                </span>
+              )}
             </div>
           )}
           {msg ? (
@@ -211,6 +231,21 @@ export function MatchRow({ match, prediction, isLocked, picks }: Props) {
           )}
         </div>
       </div>
+
+      {/* Grace option banner — deadline passed, window still open, grace not yet used */}
+      {graceState === 'available' && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-amber-700 font-medium">⏰ Grace option available until first kick-off</span>
+          <button
+            onClick={handleInvokeGrace}
+            disabled={graceIsPending}
+            className="bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 px-2 py-0.5 rounded font-medium transition-colors disabled:opacity-50"
+          >
+            {graceIsPending ? 'Activating…' : 'Use Grace (1 of 1)'}
+          </button>
+          {graceMsg && <span className="text-red-500">{graceMsg}</span>}
+        </div>
+      )}
 
       {/* Popular pick split — visible after deadline */}
       {locked && picks && picks.length > 0 && (() => {

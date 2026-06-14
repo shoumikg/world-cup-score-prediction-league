@@ -5,7 +5,8 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { validateFeedback } from '@/lib/feedback'
 import { validateDisplayName, validateFavoriteTeam } from '@/lib/profile'
-import { predictionDeadlineUTC } from '@/lib/time'
+import { predictionDeadlineUTC, istDateKey } from '@/lib/time'
+import { getAdminClient } from '@/lib/supabase/admin'
 import { validateBonusAnswer } from '@/lib/bonus'
 import { validateMatchEvent } from '@/lib/matchEvent'
 import { LATEST_CHANGELOG_ID } from '@/lib/changelog'
@@ -82,8 +83,37 @@ export async function savePrediction(
     .single()
 
   if (!match) return { error: 'Match not found.' }
-  if (predictionDeadlineUTC(match.kickoff_utc) <= new Date())
-    return { error: 'Predictions are locked — the deadline has passed.' }
+
+  const now = new Date()
+  const deadline = predictionDeadlineUTC(match.kickoff_utc)
+
+  if (deadline <= now) {
+    // Deadline passed — check if the user has grace active for this day
+    const dayKey = istDateKey(match.kickoff_utc)
+    const { data: profile } = await supabase.from('profiles').select('grace_day').eq('id', user.id).single()
+
+    if (profile?.grace_day !== dayKey)
+      return { error: 'Predictions are locked — the deadline has passed.' }
+
+    // Grace active — validate the first kickoff of the day hasn't passed yet
+    const { data: dayMatchesRaw } = await supabase.from('matches').select('kickoff_utc')
+    const firstKickoff = (dayMatchesRaw ?? [])
+      .filter((m: { kickoff_utc: string }) => istDateKey(m.kickoff_utc) === dayKey)
+      .reduce((min: number, m: { kickoff_utc: string }) => Math.min(min, new Date(m.kickoff_utc).getTime()), Infinity)
+
+    if (Date.now() >= firstKickoff)
+      return { error: 'Grace period ended — the first match has kicked off.' }
+
+    // Use service-role client to bypass the deadline RLS policy
+    const admin = getAdminClient()
+    const { error: saveErr } = await admin.from('predictions').upsert(
+      { user_id: user.id, match_id: matchId, home_pred: homePred, away_pred: awayPred, updated_at: now.toISOString() },
+      { onConflict: 'user_id,match_id' }
+    )
+    if (saveErr) return { error: 'Failed to save prediction. Please try again.' }
+    revalidatePath('/')
+    return {}
+  }
 
   const { error } = await supabase.from('predictions').upsert(
     {
@@ -91,7 +121,7 @@ export async function savePrediction(
       match_id: matchId,
       home_pred: homePred,
       away_pred: awayPred,
-      updated_at: new Date().toISOString(),
+      updated_at: now.toISOString(),
     },
     { onConflict: 'user_id,match_id' }
   )
@@ -103,6 +133,37 @@ export async function savePrediction(
   }
 
   revalidatePath('/')
+  return {}
+}
+
+export async function invokeGrace(matchId: number): Promise<{ error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+
+  const { data: match } = await supabase.from('matches').select('kickoff_utc').eq('id', matchId).single()
+  if (!match) return { error: 'Match not found.' }
+
+  const { data: profile } = await supabase.from('profiles').select('grace_day').eq('id', user.id).single()
+  if (profile?.grace_day) return { error: 'Grace has already been used.' }
+
+  const deadline = predictionDeadlineUTC(match.kickoff_utc)
+  if (deadline > new Date()) return { error: "Deadline hasn't passed — no need for grace." }
+
+  const dayKey = istDateKey(match.kickoff_utc)
+  const { data: dayMatchesRaw } = await supabase.from('matches').select('kickoff_utc')
+  const firstKickoff = (dayMatchesRaw ?? [])
+    .filter((m: { kickoff_utc: string }) => istDateKey(m.kickoff_utc) === dayKey)
+    .reduce((min: number, m: { kickoff_utc: string }) => Math.min(min, new Date(m.kickoff_utc).getTime()), Infinity)
+
+  if (Date.now() >= firstKickoff)
+    return { error: 'Grace window has closed — the first match has already kicked off.' }
+
+  const { error } = await supabase.from('profiles').update({ grace_day: dayKey }).eq('id', user.id)
+  if (error) return { error: 'Failed to activate grace. Please try again.' }
+
+  revalidatePath('/')
+  revalidatePath('/me')
   return {}
 }
 

@@ -22,14 +22,16 @@ export default async function SchedulePage(props: {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null // middleware will redirect
 
-  const [{ data: matches }, { data: allPreds }, { data: profiles }, squads] = await Promise.all([
+  const [{ data: matches }, { data: allPreds }, { data: profiles }, squads, { data: userProfileRaw }] = await Promise.all([
     supabase.from('matches').select('*').order('kickoff_utc'),
     supabase.from('predictions').select('*'), // RLS: own always + others' after deadline
     supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
     // Squads only needed when filtering by team; silently null on error so the
     // rest of the page never fails because of the openfootball CDN.
     teamFilter ? fetchSquads().catch(() => null) : Promise.resolve(null),
+    supabase.from('profiles').select('grace_day').eq('id', user.id).single(),
   ])
+  const userGraceDay = (userProfileRaw as { grace_day: string | null } | null)?.grace_day ?? null
 
   const teamSquad = teamFilter && squads ? findSquad(squads, teamFilter) : null
 
@@ -136,7 +138,15 @@ export default async function SchedulePage(props: {
 
       {Array.from(groups.entries()).map(([dateKey, dayMatches]) => {
         const deadline = predictionDeadlineUTC(dayMatches[0].kickoff_utc)
-        const deadlinePassed = deadline <= new Date()
+        const now = Date.now()
+        const deadlinePassed = deadline.getTime() <= now
+        // First kickoff of the day — grace window closes then
+        const firstKickoff = dayMatches.reduce(
+          (min, m) => Math.min(min, new Date(m.kickoff_utc).getTime()), Infinity
+        )
+        const graceWindowOpen = deadlinePassed && now < firstKickoff
+        const graceUntilISO = new Date(firstKickoff).toISOString()
+        const graceActiveForDay = userGraceDay === dateKey
         return (
           <section key={dateKey} className="mb-8">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 sticky top-20 bg-gray-50 py-1 z-10 flex items-baseline justify-between flex-wrap gap-x-3">
@@ -157,6 +167,16 @@ export default async function SchedulePage(props: {
                       }))
                       .sort((a, b) => a.displayName.localeCompare(b.displayName))
                   : undefined
+                // Grace: active = grace invoked for this day (predictions open until first kickoff)
+                //        available = grace not yet used + deadline passed + window still open
+                const graceState: 'active' | 'available' | undefined =
+                  graceActiveForDay && now < firstKickoff ? 'active' :
+                  !userGraceDay && graceWindowOpen ? 'available' :
+                  undefined
+                // isLocked: grace-active rows are open until the first kickoff, not the deadline
+                const isLockedForMatch = graceActiveForDay
+                  ? now >= firstKickoff
+                  : isDeadlinePassed(m.kickoff_utc)
                 return (
                   <div key={m.id} id={`match-${m.id}`} className="scroll-mt-28">
                     <div className="text-xs text-gray-400 pt-3 pb-1">
@@ -165,8 +185,10 @@ export default async function SchedulePage(props: {
                     <MatchRow
                       match={m}
                       prediction={predMap.get(m.id)}
-                      isLocked={isDeadlinePassed(m.kickoff_utc)}
+                      isLocked={isLockedForMatch}
                       picks={picks}
+                      graceState={graceState}
+                      graceUntil={graceState ? graceUntilISO : undefined}
                     />
                   </div>
                 )
