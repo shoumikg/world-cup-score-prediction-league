@@ -1,7 +1,9 @@
 import { createClient } from '@/lib/supabase/server'
 import { formatKickoffIST, isDeadlinePassed } from '@/lib/time'
+import { scoreOutcome, matchPoints } from '@/lib/scoring'
 import { MatchRow } from '@/app/MatchRow'
 import { LiveRefresh } from '@/app/LiveRefresh'
+import { LivePickGrades } from '@/app/LivePickGrades'
 import type { Match, Prediction, PickEntry } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -30,15 +32,36 @@ export default async function LivePage() {
     predByMatchUser.set(`${p.match_id}:${p.user_id}`, { homePred: p.home_pred, awayPred: p.away_pred })
   }
 
+  // Points the current user is provisionally earning across all live matches —
+  // sums their own pick's outcome against each in-progress score.
+  const pointsInPlay = liveMatches.reduce((sum, m) => {
+    const own = predMap.get(m.id)
+    if (!own) return sum
+    const outcome = scoreOutcome(own, m)
+    return outcome ? sum + matchPoints(outcome, m.stage) : sum
+  }, 0)
+
   return (
     <div className="max-w-4xl mx-auto px-3 sm:px-4 py-6">
       {/* Always refresh on this page — catches matches going live even when the list is empty */}
       <LiveRefresh hasLive={true} />
 
-      <h1 className="text-xl font-bold mb-6 flex items-center gap-2">
+      <h1 className="text-xl font-bold mb-3 flex items-center gap-2">
         <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse shrink-0" />
         Live Matches
       </h1>
+
+      {liveMatches.length > 0 && (
+        <div className="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm">
+          <span className="font-semibold text-amber-800">
+            {liveMatches.length} match{liveMatches.length !== 1 ? 'es' : ''} in play
+          </span>
+          <span className="text-amber-300">·</span>
+          <span className="text-amber-700">
+            You have <span className="font-bold">{pointsInPlay}</span> point{pointsInPlay !== 1 ? 's' : ''} in play right now
+          </span>
+        </div>
+      )}
 
       {liveMatches.length === 0 ? (
         <div className="bg-white rounded-xl border shadow-sm px-4 py-10 text-center">
@@ -70,6 +93,7 @@ export default async function LivePage() {
                   isLocked={isDeadlinePassed(m.kickoff_utc)}
                   picks={picks}
                 />
+                <LivePickGrades match={m} picks={picks} />
               </div>
             )
           })}
