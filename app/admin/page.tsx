@@ -125,6 +125,8 @@ export default async function AdminPage() {
                   matchId={m.id}
                   homeLabel={teamDisplay(m.home_team, m.home_source ?? 'Home')}
                   awayLabel={teamDisplay(m.away_team, m.away_source ?? 'Away')}
+                  homePlayers={(squadMap.get(m.home_team ?? '') ?? []).map(p => p.name).sort()}
+                  awayPlayers={(squadMap.get(m.away_team ?? '') ?? []).map(p => p.name).sort()}
                   events={eventList.filter(e => e.match_id === m.id)}
                 />
               </div>

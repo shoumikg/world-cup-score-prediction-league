@@ -9,6 +9,8 @@ interface Props {
   matchId: number
   homeLabel: string
   awayLabel: string
+  homePlayers: string[]   // squad names for the home team (empty if unavailable)
+  awayPlayers: string[]   // squad names for the away team
   events: MatchEvent[]
 }
 
@@ -27,13 +29,22 @@ function minuteText(e: MatchEvent): string {
 // the privileged adminAddMatchEvent / adminDeleteMatchEvent actions (RLS already
 // restricts match_events writes to admins). Mirrors what the openfootball
 // backfill produces, so manual entries display identically on the match page.
-export function AdminMatchEventsForm({ matchId, homeLabel, awayLabel, events }: Props) {
+export function AdminMatchEventsForm({
+  matchId, homeLabel, awayLabel, homePlayers, awayPlayers, events,
+}: Props) {
   const [team, setTeam] = useState<'home' | 'away'>('home')
   const [type, setType] = useState<EventType>('goal')
   const [name, setName] = useState('')
   const [minute, setMinute] = useState('')
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  // The scorer plays for the side the goal counts for — except an own goal,
+  // which is put into the opponent's net, so its scorer is from the other squad.
+  const scorerSide: 'home' | 'away' =
+    type === 'own_goal' ? (team === 'home' ? 'away' : 'home') : team
+  const suggestions = scorerSide === 'home' ? homePlayers : awayPlayers
+  const datalistId = `match-${matchId}-scorers`
 
   function handleAdd() {
     startTransition(async () => {
@@ -110,9 +121,15 @@ export function AdminMatchEventsForm({ matchId, homeLabel, awayLabel, events }: 
           onChange={e => setName(e.target.value)}
           maxLength={PLAYER_NAME_MAX}
           disabled={isPending}
-          placeholder="Scorer name"
+          placeholder={suggestions.length > 0 ? 'Pick / type scorer' : 'Scorer name'}
+          list={suggestions.length > 0 ? datalistId : undefined}
           className="border rounded px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-400 disabled:opacity-50 w-40"
         />
+        {suggestions.length > 0 && (
+          <datalist id={datalistId}>
+            {suggestions.map(p => <option key={p} value={p} />)}
+          </datalist>
+        )}
         <input
           type="text"
           value={minute}
