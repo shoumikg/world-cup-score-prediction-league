@@ -8,6 +8,7 @@ import { q1Leaders, q2Leaders, q3Leaders, isGroupStageComplete } from '@/lib/bon
 import { AdminResultForm } from './AdminResultForm'
 import { AdminKnockoutForm } from './AdminKnockoutForm'
 import { AdminQ1GradeForm } from './AdminQ1GradeForm'
+import { AdminAddBonusAnswerForm } from './AdminAddBonusAnswerForm'
 import type { Match, BonusAnswer, BonusGrade, MatchEvent } from '@/lib/types'
 import type { OFPlayer } from '@/lib/openfootball'
 
@@ -159,6 +160,10 @@ export default async function AdminPage() {
                 .filter(p => qAnswers?.has(p.id))
                 .sort((a, b) => a.display_name.localeCompare(b.display_name))
 
+              const missing = profileList
+                .filter(p => !qAnswers?.has(p.id))
+                .sort((a, b) => a.display_name.localeCompare(b.display_name))
+
               const qLeadInfo = derivedLeaders[q.id]
               return (
                 <div key={q.id} className="bg-white rounded-xl border shadow-sm px-4 py-4">
@@ -242,8 +247,33 @@ export default async function AdminPage() {
                       })}
                     </div>
                   )}
+                  {missing.length > 0 && (
+                    <details className="mt-3 pt-2 border-t">
+                      <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-700 select-none">
+                        Add answer for a player who missed the deadline ({missing.length})
+                      </summary>
+                      <div className="mt-3 divide-y">
+                        {missing.map(p => (
+                          <div key={p.id} className="py-3">
+                            <div className="flex items-center gap-x-3 mb-2">
+                              <span className="text-sm text-gray-700 min-w-0 flex-1">
+                                {teamFlag(p.favorite_team) && <span className="mr-1">{teamFlag(p.favorite_team)}</span>}
+                                {p.display_name}
+                              </span>
+                            </div>
+                            <AdminAddBonusAnswerForm
+                              userId={p.id}
+                              questionId={q.id}
+                              questionType={q.type}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                   <p className="text-xs text-gray-400 mt-3 pt-2 border-t">
-                    Players without an answer score 0 automatically and aren't listed.
+                    Players without an answer score 0 automatically. Use the section above to add one
+                    on a player&rsquo;s behalf if they missed the deadline.
                   </p>
                 </div>
               )
