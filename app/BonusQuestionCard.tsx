@@ -149,25 +149,29 @@ export function BonusQuestionCard({
     <div className="py-4 border-b last:border-0">
       <p className="text-sm font-medium text-gray-800 mb-3">{question.text}</p>
 
-      {/* Live tracker — shown after deadline when we have data */}
+      {/* Live tracker — shown after deadline when we have data.
+          The pill keeps its light accent background in both themes (the project's
+          "light chips on the dark surface" convention). Because the gray ramp is
+          remapped inversely in dark mode (low index = dark), the neutral text gets
+          an explicit dark `dark:` index so it stays legible on the light pill. */}
       {locked && tracker && (
-        <div className={`rounded-lg px-3 py-2 mb-3 text-xs flex flex-wrap items-center gap-x-4 gap-y-1 ${
+        <div className={`rounded-lg px-3 py-2 mb-3 text-xs flex flex-wrap items-baseline gap-x-3 gap-y-1 ${
           tracker.isComplete ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'
         }`}>
-          <span className={`font-medium ${tracker.isComplete ? 'text-green-700' : 'text-blue-700'}`}>
+          <span className={`font-medium shrink-0 ${tracker.isComplete ? 'text-green-700' : 'text-blue-700'}`}>
             {tracker.isComplete ? '✓ Final' : '● Live'}
           </span>
           {tracker.leaders.length === 0 ? (
-            <span className="text-gray-400">No data yet</span>
+            <span className="text-gray-400 dark:text-gray-400">No data yet</span>
           ) : (
-            <span className="text-gray-700">
+            <span className="text-gray-700 dark:text-gray-200 min-w-0 break-words">
               {question.type === 'player' && tracker.leaderTeams
                 ? tracker.leaders.map((name, i) =>
                     `${name} (${teamDisplay(tracker.leaderTeams![i], tracker.leaderTeams![i])})`
                   ).join(', ')
                 : tracker.leaders.map(t => teamDisplay(t, t)).join(', ')}
               {' '}
-              <span className="text-gray-500">
+              <span className="text-gray-500 dark:text-gray-300 whitespace-nowrap">
                 · {tracker.stat} {tracker.stat === 1 && tracker.statLabel === 'goal' ? 'goal' : tracker.statLabel}
               </span>
             </span>
@@ -252,7 +256,7 @@ export function BonusQuestionCard({
           <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none">
             Everyone's picks ({answeredCount}{totalPlayers ? ` of ${totalPlayers}` : ''})
           </summary>
-          <div className="mt-2 space-y-1.5 pb-1">
+          <div className="mt-2 divide-y divide-gray-100">
             {picks.map((entry, i) => {
               const effectiveKey = question.type === 'player'
                 ? entry.confirmedAnswer
@@ -268,16 +272,44 @@ export function BonusQuestionCard({
                 : null
               const chip = entryStatus ? STATUS_CHIP[entryStatus] : null
 
-              return (
-                <div key={i} className="flex items-center gap-2">
-                  <span className="text-xs text-gray-600 min-w-0 flex-1 truncate">
-                    {teamFlag(entry.favoriteTeam) && (
-                      <span className="mr-1">{teamFlag(entry.favoriteTeam)}</span>
+              if (question.type === 'player') {
+                // Q1: two-row layout so long player+country answers don't cramp the name
+                return (
+                  <div key={i} className="py-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-600 flex-1">
+                        {teamFlag(entry.favoriteTeam) && <span className="mr-1">{teamFlag(entry.favoriteTeam)}</span>}
+                        {entry.displayName}
+                      </span>
+                      {chip && entry.answer && (
+                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full shrink-0 ${chip.cls}`}>
+                          {chip.label}
+                        </span>
+                      )}
+                      {!entry.answer && (
+                        <span className="text-xs text-gray-300 italic shrink-0">no pick</span>
+                      )}
+                    </div>
+                    {entry.answer !== null && (
+                      <div className="mt-0.5">
+                        <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+                          {chipLabel(entry.answer, entry.confirmedAnswer)}
+                        </span>
+                      </div>
                     )}
+                  </div>
+                )
+              }
+
+              // Q2/Q3: single row — team names are short enough
+              return (
+                <div key={i} className="flex items-center gap-2 py-1.5">
+                  <span className="text-xs text-gray-600 min-w-0 flex-1 truncate">
+                    {teamFlag(entry.favoriteTeam) && <span className="mr-1">{teamFlag(entry.favoriteTeam)}</span>}
                     {entry.displayName}
                   </span>
                   {entry.answer !== null ? (
-                    <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 shrink-0 max-w-48 truncate">
+                    <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 shrink-0">
                       {chipLabel(entry.answer, entry.confirmedAnswer)}
                     </span>
                   ) : (
