@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { scoreOutcome, scoreColor, stageLabel, matchPoints } from '@/lib/scoring'
 import { formatKickoffIST } from '@/lib/time'
-import { teamDisplay, teamFlag } from '@/lib/flags'
+import { teamFlag } from '@/lib/flags'
+import { TeamLink } from '@/app/TeamLink'
 import type { Match, Prediction } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -144,12 +145,14 @@ export default async function ComparePage(props: {
                     const ob = pb ? scoreOutcome(pb, m) : null
                     if (oa) stagePtsA += matchPoints(oa, m.stage)
                     if (ob) stagePtsB += matchPoints(ob, m.stage)
-                    const home = teamDisplay(m.home_team, m.home_source ?? '?')
-                    const away = teamDisplay(m.away_team, m.away_source ?? '?')
                     return (
                       <tr key={m.id} className="border-t">
                         <td className="px-3 py-2 text-gray-600">
-                          <div>{home} vs {away}</div>
+                          <div>
+                            <TeamLink team={m.home_team} fallback={m.home_source ?? '?'} />
+                            {' '}vs{' '}
+                            <TeamLink team={m.away_team} fallback={m.away_source ?? '?'} />
+                          </div>
                           <div className="text-gray-400">{formatKickoffIST(m.kickoff_utc)} IST</div>
                         </td>
                         <td className="text-center px-2 py-2">

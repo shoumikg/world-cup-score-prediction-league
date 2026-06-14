@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { scoreColor, stageLabel } from '@/lib/scoring'
-import { teamDisplay } from '@/lib/flags'
+import { TeamLink } from '@/app/TeamLink'
 import type { Match, Prediction } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -129,8 +129,6 @@ function BracketTree({ node }: { node: BracketNode }) {
 }
 
 function MatchCell({ match, pred }: { match: Match; pred: Prediction | undefined }) {
-  const home = teamDisplay(match.home_team, match.home_source ?? '?')
-  const away = teamDisplay(match.away_team, match.away_source ?? '?')
   const hasResult   = match.home_score !== null
   const isPlaceholder = !match.home_team
 
@@ -142,13 +140,13 @@ function MatchCell({ match, pred }: { match: Match; pred: Prediction | undefined
       <div className="space-y-0.5 mb-1.5">
         <div className="flex items-center justify-between gap-1">
           <span className={`truncate ${isPlaceholder ? 'text-[10px] text-gray-400 italic' : 'font-medium text-gray-800'}`}>
-            {home}
+            <TeamLink team={match.home_team} fallback={match.home_source ?? '?'} />
           </span>
           {hasResult && <span className="font-bold shrink-0 text-gray-900">{match.home_score}</span>}
         </div>
         <div className="flex items-center justify-between gap-1">
           <span className={`truncate ${isPlaceholder ? 'text-[10px] text-gray-400 italic' : 'font-medium text-gray-800'}`}>
-            {away}
+            <TeamLink team={match.away_team} fallback={match.away_source ?? '?'} />
           </span>
           {hasResult && <span className="font-bold shrink-0 text-gray-900">{match.away_score}</span>}
         </div>

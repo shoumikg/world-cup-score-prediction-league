@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { formatKickoffIST, isKickedOff } from '@/lib/time'
 import { teamDisplay } from '@/lib/flags'
 import { fetchSquads, normalizeOFTeamName } from '@/lib/openfootball'
+import { TeamLink } from '@/app/TeamLink'
 import { AdminResultForm } from './AdminResultForm'
 import { AdminKnockoutForm } from './AdminKnockoutForm'
 import { AdminMatchEventsForm } from './AdminMatchEventsForm'
@@ -70,7 +71,9 @@ export default async function AdminPage() {
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-xs text-gray-400">#{m.id}</span>
                   <span className="text-sm font-medium">
-                    {teamDisplay(m.home_team, m.home_source ?? '')} vs {teamDisplay(m.away_team, m.away_source ?? '')}
+                    <TeamLink team={m.home_team} fallback={m.home_source ?? ''} />
+                    {' '}vs{' '}
+                    <TeamLink team={m.away_team} fallback={m.away_source ?? ''} />
                   </span>
                   <span className="text-xs text-gray-400 ml-auto">{formatKickoffIST(m.kickoff_utc)} IST</span>
                 </div>
