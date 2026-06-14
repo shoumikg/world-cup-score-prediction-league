@@ -165,7 +165,7 @@ export function BonusQuestionCard({
                 ? tracker.leaders.map((name, i) =>
                     `${name} (${teamDisplay(tracker.leaderTeams![i], tracker.leaderTeams![i])})`
                   ).join(', ')
-                : tracker.leaders.join(', ')}
+                : tracker.leaders.map(t => teamDisplay(t, t)).join(', ')}
               {' '}
               <span className="text-gray-500">
                 · {tracker.stat} {tracker.stat === 1 && tracker.statLabel === 'goal' ? 'goal' : tracker.statLabel}

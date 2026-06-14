@@ -180,7 +180,7 @@ export default async function AdminPage() {
                             ? qLeadInfo.leaders.map((l, i) =>
                                 `${l} (${teamDisplay(qLeadInfo.leaderTeams![i], qLeadInfo.leaderTeams![i])})`
                               ).join(', ')
-                            : qLeadInfo.leaders.join(', ')}
+                            : qLeadInfo.leaders.map(t => teamDisplay(t, t)).join(', ')}
                         </span>
                         {' '}· {qLeadInfo.stat} {qLeadInfo.statLabel}
                         {!groupComplete && <span className="text-amber-500 ml-1">(provisional)</span>}
