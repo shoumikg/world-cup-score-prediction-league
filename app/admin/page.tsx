@@ -67,7 +67,12 @@ export default async function AdminPage() {
     2: { ...derivedQ2, statLabel: 'goals scored' },
     3: { ...derivedQ3, statLabel: 'goals conceded' },
   }
-  const started = all.filter(m => isKickedOff(m.kickoff_utc))
+  // Reverse chronological (most recent first): the newest matches are the ones
+  // needing manual result / goal-scorer entry, while older ones are usually
+  // already covered by the openfootball backfill.
+  const started = all
+    .filter(m => isKickedOff(m.kickoff_utc))
+    .sort((a, b) => b.kickoff_utc.localeCompare(a.kickoff_utc))
   const knockouts = all.filter(m => m.stage !== 'group' && !m.home_team)
 
   // Bonus grading setup
