@@ -8,6 +8,7 @@ import { validateFeedback } from '@/lib/feedback'
 import { validateDisplayName, validateFavoriteTeam } from '@/lib/profile'
 import { predictionDeadlineUTC } from '@/lib/time'
 import { validateBonusAnswer, validateBonusGrade } from '@/lib/bonus'
+import { validateMatchEvent } from '@/lib/matchEvent'
 import { LATEST_CHANGELOG_ID } from '@/lib/changelog'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
@@ -386,6 +387,106 @@ export async function adminSaveBonusAnswer(
   if (error) return { error: 'Failed to save answer. Please try again.' }
 
   revalidatePath('/admin')
+  revalidatePath('/bonus')
+  revalidatePath('/leaderboard')
+  return {}
+}
+
+// ── Match events (goal scorers) ───────────────────────────────────────────────
+
+// Admin-only: add a goal-scorer event for a live or past match. Mirrors what the
+// openfootball backfill writes (lib/openfootball.ts), so manual entries fill the
+// gap until the public dataset publishes a match. RLS already restricts
+// match_events writes to admins (migration 0012); the explicit check below is
+// defense in depth, matching saveResult/saveKnockoutTeams.
+//
+// Note: the daily backfill is delete-then-insert per matched fixture, so once
+// openfootball publishes this match it will replace these manual rows with the
+// authoritative data. Matches openfootball hasn't published yet keep their
+// manual events untouched.
+export async function adminAddMatchEvent(
+  matchId: number,
+  team: string,
+  type: string,
+  rawPlayerName: string,
+  rawMinute: string | null
+): Promise<{ error?: string }> {
+  if (!Number.isInteger(matchId)) return { error: 'Invalid match.' }
+
+  const validated = validateMatchEvent(team, type, rawPlayerName, rawMinute)
+  if ('error' in validated) return { error: validated.error }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile?.is_admin) return { error: 'Unauthorized.' }
+
+  const { data: match } = await supabase
+    .from('matches')
+    .select('id')
+    .eq('id', matchId)
+    .single()
+
+  if (!match) return { error: 'Match not found.' }
+
+  const { error } = await supabase.from('match_events').insert({
+    match_id: matchId,
+    team: validated.value.team,
+    type: validated.value.type,
+    player_name: validated.value.playerName,
+    minute: validated.value.minute,
+    extra_time: validated.value.extraTime,
+    assist_name: null,
+  })
+
+  if (error) {
+    if (error.code === '42501') return { error: 'Unauthorized.' }
+    return { error: 'Failed to add goal. Please try again.' }
+  }
+
+  revalidatePath('/admin')
+  revalidatePath(`/match/${matchId}`)
+  revalidatePath('/bonus')
+  revalidatePath('/leaderboard')
+  return {}
+}
+
+// Admin-only: remove a goal-scorer event (to fix a typo or a wrong entry).
+// matchId is passed only so the match detail page can be revalidated.
+export async function adminDeleteMatchEvent(
+  eventId: number,
+  matchId: number
+): Promise<{ error?: string }> {
+  if (!Number.isInteger(eventId)) return { error: 'Invalid event.' }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile?.is_admin) return { error: 'Unauthorized.' }
+
+  const { error } = await supabase.from('match_events').delete().eq('id', eventId)
+
+  if (error) {
+    if (error.code === '42501') return { error: 'Unauthorized.' }
+    return { error: 'Failed to remove goal. Please try again.' }
+  }
+
+  revalidatePath('/admin')
+  if (Number.isInteger(matchId)) revalidatePath(`/match/${matchId}`)
   revalidatePath('/bonus')
   revalidatePath('/leaderboard')
   return {}

@@ -9,6 +9,7 @@ import { AdminResultForm } from './AdminResultForm'
 import { AdminKnockoutForm } from './AdminKnockoutForm'
 import { AdminQ1GradeForm } from './AdminQ1GradeForm'
 import { AdminAddBonusAnswerForm } from './AdminAddBonusAnswerForm'
+import { AdminMatchEventsForm } from './AdminMatchEventsForm'
 import type { Match, BonusAnswer, BonusGrade, MatchEvent } from '@/lib/types'
 import type { OFPlayer } from '@/lib/openfootball'
 
@@ -115,6 +116,12 @@ export default async function AdminPage() {
                   <span className="text-xs text-gray-400 ml-auto">{formatKickoffIST(m.kickoff_utc)} IST</span>
                 </div>
                 <AdminResultForm match={m} />
+                <AdminMatchEventsForm
+                  matchId={m.id}
+                  homeLabel={teamDisplay(m.home_team, m.home_source ?? 'Home')}
+                  awayLabel={teamDisplay(m.away_team, m.away_source ?? 'Away')}
+                  events={eventList.filter(e => e.match_id === m.id)}
+                />
               </div>
             ))}
           </div>
