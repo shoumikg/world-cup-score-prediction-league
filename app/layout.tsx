@@ -89,6 +89,7 @@ export default async function RootLayout({
                   </a>
                 )}
                 <a href="/leaderboard" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Leaderboard</a>
+                <a href="/me" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">My Stats</a>
                 <a href="/groups" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Groups</a>
                 <a href="/guide" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Guide</a>
                 <a href="/bonus" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Bonus</a>

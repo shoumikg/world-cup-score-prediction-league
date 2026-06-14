@@ -2,7 +2,8 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { istDateKey, formatKickoffIST, predictionDeadlineUTC } from '@/lib/time'
-import { teamDisplay, teamFlag } from '@/lib/flags'
+import { teamFlag } from '@/lib/flags'
+import { TeamLink } from '@/app/TeamLink'
 import type { Match, Prediction } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -86,15 +87,17 @@ export default async function AdminPendingPage() {
       </div>
 
       {targetMatches.map(m => {
-        const home = teamDisplay(m.home_team, m.home_source ?? 'TBD')
-        const away = teamDisplay(m.away_team, m.away_source ?? 'TBD')
         const unpredicted = players.filter(p => !predMap.has(`${m.id}:${p.id}`))
 
         return (
           <div key={m.id} className="bg-white rounded-xl border shadow-sm overflow-hidden">
             <div className="px-4 py-3 bg-gray-50 border-b flex items-center gap-2 flex-wrap">
               <span className="text-xs text-gray-400">#{m.id}</span>
-              <span className="text-sm font-medium">{home} vs {away}</span>
+              <span className="text-sm font-medium">
+                <TeamLink team={m.home_team} fallback={m.home_source ?? 'TBD'} />
+                {' '}vs{' '}
+                <TeamLink team={m.away_team} fallback={m.away_source ?? 'TBD'} />
+              </span>
               <span className="ml-auto text-xs text-gray-400">{formatKickoffIST(m.kickoff_utc)} IST</span>
               {unpredicted.length > 0 ? (
                 <span className="text-xs font-medium text-red-500">{unpredicted.length} missing</span>

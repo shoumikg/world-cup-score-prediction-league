@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { formatKickoffIST, isDeadlinePassed, predictionDeadlineUTC } from '@/lib/time'
 import { teamDisplay, teamFlag } from '@/lib/flags'
+import { TeamLink } from '@/app/TeamLink'
 import { scoreColor, scoreOutcome, stageLabel, OUTCOME_CLASSES } from '@/lib/scoring'
 import { DeadlineCountdown } from '@/app/DeadlineCountdown'
 import type { Match, Prediction, PickEntry, MatchEvent } from '@/lib/types'
@@ -52,6 +53,7 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
   const ownPred = preds.find(p => p.user_id === user.id)
   const hasResult = match.home_score !== null
 
+  // Plain team labels for the aggregate pick-split chips (counts, not links).
   const homeName = teamDisplay(match.home_team, match.home_source ?? 'TBD')
   const awayName = teamDisplay(match.away_team, match.away_source ?? 'TBD')
 
@@ -134,11 +136,15 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
           {match.venue && <span className="text-xs text-gray-400">· {match.venue}</span>}
         </div>
         <div className="flex items-center justify-between gap-3 mb-3">
-          <p className="text-base font-semibold flex-1">{homeName}</p>
+          <p className="text-base font-semibold flex-1">
+            <TeamLink team={match.home_team} fallback={match.home_source ?? 'TBD'} />
+          </p>
           <div className="shrink-0">
             {scoreChip ?? <span className="text-sm text-gray-400 px-2">vs</span>}
           </div>
-          <p className="text-base font-semibold flex-1 text-right">{awayName}</p>
+          <p className="text-base font-semibold flex-1 text-right">
+            <TeamLink team={match.away_team} fallback={match.away_source ?? 'TBD'} />
+          </p>
         </div>
         <div className="border-t pt-3 flex items-center gap-2 flex-wrap">
           <span className="text-xs text-gray-400 shrink-0">Your pick</span>
@@ -171,7 +177,9 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
           <div className="flex gap-4">
             {/* Home goals */}
             <div className="flex-1">
-              <p className="text-xs text-gray-400 mb-2 truncate font-medium">{homeName}</p>
+              <p className="text-xs text-gray-400 mb-2 truncate font-medium">
+                <TeamLink team={match.home_team} fallback={match.home_source ?? 'TBD'} />
+              </p>
               <div className="space-y-1.5">
                 {events.filter(e => e.team === 'home').length > 0
                   ? events.filter(e => e.team === 'home').map(e => (
@@ -185,7 +193,9 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
             <div className="w-px bg-gray-100 shrink-0" />
             {/* Away goals */}
             <div className="flex-1">
-              <p className="text-xs text-gray-400 mb-2 truncate font-medium">{awayName}</p>
+              <p className="text-xs text-gray-400 mb-2 truncate font-medium">
+                <TeamLink team={match.away_team} fallback={match.away_source ?? 'TBD'} />
+              </p>
               <div className="space-y-1.5">
                 {events.filter(e => e.team === 'away').length > 0
                   ? events.filter(e => e.team === 'away').map(e => (
