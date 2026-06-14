@@ -272,16 +272,44 @@ export function BonusQuestionCard({
                 : null
               const chip = entryStatus ? STATUS_CHIP[entryStatus] : null
 
-              return (
-                <div key={i} className="flex items-start gap-2 py-1.5">
-                  <span className="text-xs text-gray-600 min-w-0 flex-1 break-words leading-snug">
-                    {teamFlag(entry.favoriteTeam) && (
-                      <span className="mr-1">{teamFlag(entry.favoriteTeam)}</span>
+              if (question.type === 'player') {
+                // Q1: two-row layout so long player+country answers don't cramp the name
+                return (
+                  <div key={i} className="py-1.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-600 flex-1">
+                        {teamFlag(entry.favoriteTeam) && <span className="mr-1">{teamFlag(entry.favoriteTeam)}</span>}
+                        {entry.displayName}
+                      </span>
+                      {chip && entry.answer && (
+                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full shrink-0 ${chip.cls}`}>
+                          {chip.label}
+                        </span>
+                      )}
+                      {!entry.answer && (
+                        <span className="text-xs text-gray-300 italic shrink-0">no pick</span>
+                      )}
+                    </div>
+                    {entry.answer !== null && (
+                      <div className="mt-0.5">
+                        <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">
+                          {chipLabel(entry.answer, entry.confirmedAnswer)}
+                        </span>
+                      </div>
                     )}
+                  </div>
+                )
+              }
+
+              // Q2/Q3: single row — team names are short enough
+              return (
+                <div key={i} className="flex items-center gap-2 py-1.5">
+                  <span className="text-xs text-gray-600 min-w-0 flex-1 truncate">
+                    {teamFlag(entry.favoriteTeam) && <span className="mr-1">{teamFlag(entry.favoriteTeam)}</span>}
                     {entry.displayName}
                   </span>
                   {entry.answer !== null ? (
-                    <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 shrink-0 text-right break-words leading-snug">
+                    <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 shrink-0">
                       {chipLabel(entry.answer, entry.confirmedAnswer)}
                     </span>
                   ) : (
