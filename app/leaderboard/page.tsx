@@ -3,6 +3,7 @@ import { computeLeaderboard } from '@/lib/leaderboard'
 import { computeBonusCorrectness, isGroupStageComplete } from '@/lib/bonusTracker'
 import { teamFlag } from '@/lib/flags'
 import { OUTCOME_CLASSES } from '@/lib/scoring'
+import { LiveRefresh } from '@/app/LiveRefresh'
 import type { Match, Prediction, BonusGrade, BonusAnswer, MatchEvent } from '@/lib/types'
 import type { LeaderboardProfile } from '@/lib/leaderboard'
 
@@ -57,17 +58,47 @@ export default async function LeaderboardPage() {
     derivedGrades
   )
 
+  // While a match is in progress the standings above already fold in live
+  // scores. Diff them against a finished-only baseline so we can show how each
+  // player is *projected* to move and how many of their points are still in play.
+  const hasLive = allMatches.some(m => m.status === 'live')
+  const liveInfo = new Map<string, { movement: number; inPlay: number }>()
+  if (hasLive) {
+    const baselineRows = computeLeaderboard(
+      playerProfiles,
+      (preds ?? []) as Prediction[],
+      allMatches.filter(m => m.status !== 'live'),
+      derivedGrades
+    )
+    const baseline = new Map(baselineRows.map(r => [r.userId, r]))
+    for (const r of rows) {
+      const b = baseline.get(r.userId)
+      if (!b) continue
+      liveInfo.set(r.userId, { movement: b.rank - r.rank, inPlay: r.total - b.total })
+    }
+  }
+
   const anyScored = rows.some(r => r.scored > 0 || r.bonusPoints > 0)
   const currentUserName = playerProfiles.find(p => p.id === user.id)?.display_name ?? ''
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
+      <LiveRefresh hasLive={hasLive} />
       <h1 className="text-xl font-bold mb-1">Leaderboard</h1>
-      <p className="text-sm text-gray-500 mb-6">
+      <p className="text-sm text-gray-500 mb-3">
         {anyScored
           ? 'How everyone is doing so far.'
           : 'Everyone in the league. Tallies appear once results come in.'}
       </p>
+
+      {hasLive && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm">
+          <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+          <span className="text-amber-800">
+            Standings are live — arrows show projected movement and <span className="font-semibold">⚡</span> points can still change.
+          </span>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border shadow-sm overflow-x-auto">
         <table className="min-w-[480px] w-full text-sm">
@@ -84,9 +115,18 @@ export default async function LeaderboardPage() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {rows.map((r) => {
+              const info = liveInfo.get(r.userId)
+              return (
               <tr key={r.userId} className="border-t first:border-0">
-                <td className="pl-3 py-2.5 text-gray-400 text-xs sticky left-0 bg-white z-10">{r.rank}</td>
+                <td className="pl-3 py-2.5 text-xs sticky left-0 bg-white z-10 whitespace-nowrap">
+                  <span className="text-gray-400">{r.rank}</span>
+                  {info && info.movement !== 0 && (
+                    <span className={`ml-1 font-semibold ${info.movement > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                      {info.movement > 0 ? `▲${info.movement}` : `▼${-info.movement}`}
+                    </span>
+                  )}
+                </td>
                 <td className="py-2.5 font-medium sticky left-8 bg-white z-10 pr-2">
                   {r.userId === user.id ? (
                     <span>
@@ -139,11 +179,17 @@ export default async function LeaderboardPage() {
                     {r.bonusPoints}
                   </span>
                 </td>
-                <td className="text-center py-2.5 pr-3">
+                <td className="text-center py-2.5 pr-3 whitespace-nowrap">
                   <span className="font-bold text-gray-900 text-sm">{r.total}</span>
+                  {info && info.inPlay > 0 && (
+                    <span className="ml-1 text-[10px] font-semibold text-amber-600" title="Points in play from live matches">
+                      ⚡+{info.inPlay}
+                    </span>
+                  )}
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>

@@ -58,6 +58,17 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
       'See your accuracy split across group and knockout stages, your bonus-answer status, and a full history of every match you predicted.',
     ],
   },
+  {
+    id: 6,
+    date: '2026-06-14',
+    title: 'Live match experience',
+    items: [
+      'The leaderboard, Live page, match detail, and My Stats all auto-refresh while matches are in progress — no more stale scores.',
+      'Provisional ⚡ points show what you\'re earning right now against the live score, with clear "if it ends now" labels so nothing looks final until it is.',
+      'Leaderboard and My Stats show projected ▲/▼ rank movement based on in-progress results vs. a finished-only baseline.',
+      'Match detail lists how many points each player\'s pick is earning live; My Stats splits your tally into final, live, and pending and draws live matches as hollow pulsing dots on the chart.',
+    ],
+  },
 ]
 
 export const LATEST_CHANGELOG_ID = Math.max(0, ...CHANGELOG.map(e => e.id))
