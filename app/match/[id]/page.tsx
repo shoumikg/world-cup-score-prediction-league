@@ -52,8 +52,10 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
   const deadlinePassed = isDeadlinePassed(match.kickoff_utc)
   const deadline = predictionDeadlineUTC(match.kickoff_utc)
   const ownPred = preds.find(p => p.user_id === user.id)
-  const hasResult = match.home_score !== null
+  const hasResult = match.home_score !== null && match.away_score !== null
   const isLive = match.status === 'live'
+  // Live framing (badges, per-pick points) only makes sense once a score exists
+  const liveScored = isLive && hasResult
 
   // Plain team labels for the aggregate pick-split chips (counts, not links).
   const homeName = teamDisplay(match.home_team, match.home_source ?? 'TBD')
@@ -234,7 +236,7 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
             <div className="bg-white rounded-xl border shadow-sm p-4 mb-4">
               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
                 Score distribution · {predictedCount} pick{predictedCount !== 1 ? 's' : ''}
-                {isLive && <span className="ml-2 text-amber-600 normal-case font-semibold">⚡ if it ends now</span>}
+                {liveScored && <span className="ml-2 text-amber-600 normal-case font-semibold">⚡ if it ends now</span>}
               </p>
               <div className="space-y-1.5">
                 {histogram.map(({ homePred, awayPred, count, isSelf }) => {
@@ -289,7 +291,7 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
           <div className="bg-white rounded-xl border shadow-sm p-4">
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
               All picks
-              {isLive && <span className="ml-2 text-amber-600 normal-case font-semibold">⚡ points if it ends now</span>}
+              {liveScored && <span className="ml-2 text-amber-600 normal-case font-semibold">⚡ points if it ends now</span>}
             </p>
             <div>
               {sortedPicks.map((entry, i) => (
@@ -315,13 +317,18 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
                     ) : (
                       <span className="text-xs text-gray-300 italic shrink-0">no pick</span>
                     )}
-                    {hasResult && (
-                      <span className="text-xs font-semibold text-gray-500 w-8 text-right shrink-0 tabular-nums">
-                        {entry.prediction !== null
-                          ? `+${pickPoints(entry.prediction.homePred, entry.prediction.awayPred)}`
-                          : ''}
-                      </span>
-                    )}
+                    {hasResult && (() => {
+                      const pts = entry.prediction !== null
+                        ? pickPoints(entry.prediction.homePred, entry.prediction.awayPred)
+                        : 0
+                      // Only show earned points; a wrong (0-pt) pick stays blank
+                      // so "+0" doesn't read as if it scored (the red chip says wrong).
+                      return (
+                        <span className="text-xs font-semibold text-gray-500 w-8 text-right shrink-0 tabular-nums">
+                          {pts > 0 ? `+${pts}` : ''}
+                        </span>
+                      )
+                    })()}
                   </div>
                 ))}
             </div>
