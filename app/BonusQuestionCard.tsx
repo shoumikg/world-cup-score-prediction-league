@@ -151,23 +151,27 @@ export function BonusQuestionCard({
 
       {/* Live tracker — shown after deadline when we have data */}
       {locked && tracker && (
-        <div className={`rounded-lg px-3 py-2 mb-3 text-xs flex flex-wrap items-center gap-x-4 gap-y-1 ${
-          tracker.isComplete ? 'bg-green-50 border border-green-200' : 'bg-blue-50 border border-blue-200'
+        <div className={`rounded-lg px-3 py-2 mb-3 text-xs flex flex-wrap items-baseline gap-x-3 gap-y-1 ${
+          tracker.isComplete
+            ? 'bg-green-50 border border-green-200 dark:bg-green-500/10 dark:border-green-500/30'
+            : 'bg-blue-50 border border-blue-200 dark:bg-blue-500/10 dark:border-blue-500/30'
         }`}>
-          <span className={`font-medium ${tracker.isComplete ? 'text-green-700' : 'text-blue-700'}`}>
+          <span className={`font-medium shrink-0 ${
+            tracker.isComplete ? 'text-green-700 dark:text-green-400' : 'text-blue-700 dark:text-blue-400'
+          }`}>
             {tracker.isComplete ? '✓ Final' : '● Live'}
           </span>
           {tracker.leaders.length === 0 ? (
             <span className="text-gray-400">No data yet</span>
           ) : (
-            <span className="text-gray-700">
+            <span className="text-gray-700 dark:text-gray-200 min-w-0 break-words">
               {question.type === 'player' && tracker.leaderTeams
                 ? tracker.leaders.map((name, i) =>
                     `${name} (${teamDisplay(tracker.leaderTeams![i], tracker.leaderTeams![i])})`
                   ).join(', ')
                 : tracker.leaders.map(t => teamDisplay(t, t)).join(', ')}
               {' '}
-              <span className="text-gray-500">
+              <span className="text-gray-500 dark:text-gray-400 whitespace-nowrap">
                 · {tracker.stat} {tracker.stat === 1 && tracker.statLabel === 'goal' ? 'goal' : tracker.statLabel}
               </span>
             </span>
@@ -277,7 +281,7 @@ export function BonusQuestionCard({
                     {entry.displayName}
                   </span>
                   {entry.answer !== null ? (
-                    <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 shrink-0 max-w-48 truncate">
+                    <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 shrink-0 text-right">
                       {chipLabel(entry.answer, entry.confirmedAnswer)}
                     </span>
                   ) : (
