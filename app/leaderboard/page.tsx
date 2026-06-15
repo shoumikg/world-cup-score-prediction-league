@@ -19,13 +19,17 @@ export default async function LeaderboardPage(props: {
   //   ?live=off      → settled (finished matches only, no bonus)
   const showBonus = bonusParam !== 'off'
   const showLive = liveParam !== 'off'
+  // Single source of truth for the bonus column: only shown when both flags are on.
+  // Controls th, td, and computeLeaderboard arg — must stay in sync.
+  const showBonusColumn = showBonus && showLive
 
   const supabase = await createClient()
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null // middleware will redirect
 
-  // profiles: only safe columns — usernames must never reach this page
+  // profiles: only safe columns — usernames must never reach this page.
+  // bonus_answers and match_events are only needed when showing live data.
   const [
     { data: profiles },
     { data: matches },
@@ -38,22 +42,31 @@ export default async function LeaderboardPage(props: {
     supabase.from('matches').select('*'),  // all matches (group-complete check needs unscored too)
     supabase.from('predictions').select('*'),
     supabase.from('bonus_grades').select('user_id, question_id, confirmed_answer'),
-    supabase.from('bonus_answers').select('*'),
-    supabase.from('match_events').select('*'),
+    showLive
+      ? supabase.from('bonus_answers').select('*')
+      : Promise.resolve({ data: null, error: null }),
+    showLive
+      ? supabase.from('match_events').select('*')
+      : Promise.resolve({ data: null, error: null }),
   ])
 
-  // Build confirmed Q1 map: user_id → canonical player name
+  // Build confirmed Q1 map: user_id → canonical player name.
+  // Only needed when live data is shown (bonus uses it).
   const confirmedQ1 = new Map<string, string>()
-  for (const g of (grades ?? []) as Pick<BonusGrade, 'user_id' | 'question_id' | 'confirmed_answer'>[]) {
-    if (g.question_id === 1 && g.confirmed_answer) confirmedQ1.set(g.user_id, g.confirmed_answer)
+  if (showLive) {
+    for (const g of (grades ?? []) as Pick<BonusGrade, 'user_id' | 'question_id' | 'confirmed_answer'>[]) {
+      if (g.question_id === 1 && g.confirmed_answer) confirmedQ1.set(g.user_id, g.confirmed_answer)
+    }
   }
 
-  const derivedGrades = computeBonusCorrectness(
-    (bonusAnswers ?? []) as BonusAnswer[],
-    confirmedQ1,
-    (events ?? []) as MatchEvent[],
-    (matches ?? []) as Match[]
-  )
+  const derivedGrades = showLive
+    ? computeBonusCorrectness(
+        (bonusAnswers ?? []) as BonusAnswer[],
+        confirmedQ1,
+        (events ?? []) as MatchEvent[],
+        (matches ?? []) as Match[]
+      )
+    : []
 
   const allMatches = (matches ?? []) as Match[]
   const groupComplete = isGroupStageComplete(allMatches)
@@ -61,24 +74,33 @@ export default async function LeaderboardPage(props: {
   type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
   const playerProfiles = ((profiles ?? []) as ProfileRow[]).filter(p => !p.is_admin)
 
+  // Hoisted once — used both by baseMatches (settled mode) and the liveInfo baseline.
+  const finishedMatches = allMatches.filter(m => m.status !== 'live')
+
   // Settled mode: exclude in-progress matches entirely; bonus always off (bonus
   // derives from live event data, so it can't be consistent without live scores).
-  const baseMatches = showLive ? allMatches : allMatches.filter(m => m.status !== 'live')
+  const baseMatches = showLive ? allMatches : finishedMatches
 
   const rows = computeLeaderboard(
     playerProfiles,
     (preds ?? []) as Prediction[],
     baseMatches,
-    (showBonus && showLive) ? derivedGrades : []
+    showBonusColumn ? derivedGrades : []
   )
 
   // While a match is in progress the standings above already fold in live
   // scores. Diff them against a finished-only baseline so we can show how each
   // player is *projected* to move and how many of their points are still in play.
-  const hasLive = showLive && allMatches.some(m => m.status === 'live')
+  //
+  // hasAnyLive: the raw signal, used to keep LiveRefresh alive in all modes so
+  // the page updates when the match ends (even in settled view the standings
+  // change once the live match becomes settled).
+  // hasLive: additionally gated on showLive — controls live-specific UI (banner,
+  // arrows, ⚡ badge) which are meaningless in settled mode.
+  const hasAnyLive = allMatches.some(m => m.status === 'live')
+  const hasLive = showLive && hasAnyLive
   const liveInfo = new Map<string, { movement: number; inPlay: number }>()
   if (hasLive) {
-    const finishedMatches = allMatches.filter(m => m.status !== 'live')
     const liveMatchById = new Map(allMatches.filter(m => m.status === 'live').map(m => [m.id, m]))
     const finishedEvents = ((events ?? []) as MatchEvent[]).filter(e => !liveMatchById.has(e.match_id))
     const baseDerivedGrades = computeBonusCorrectness(
@@ -116,7 +138,7 @@ export default async function LeaderboardPage(props: {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
-      <LiveRefresh hasLive={hasLive} />
+      <LiveRefresh hasLive={hasAnyLive} />
       <h1 className="text-xl font-bold mb-1">Leaderboard</h1>
       <p className="text-sm text-gray-500 mb-3">
         {anyScored
@@ -171,7 +193,7 @@ export default async function LeaderboardPage(props: {
               <th className="font-medium w-14 py-2">GD</th>
               <th className="font-medium w-14 py-2">Result</th>
               <th className="font-medium w-14 py-2">Wrong</th>
-              {showBonus && showLive && <th className="font-medium w-14 py-2">Bonus</th>}
+              {showBonusColumn && <th className="font-medium w-14 py-2">Bonus</th>}
               <th className="font-medium w-14 pr-3 py-2">Pts</th>
             </tr>
           </thead>
@@ -236,7 +258,7 @@ export default async function LeaderboardPage(props: {
                     {r.wrong}
                   </span>
                 </td>
-                {showBonus && showLive && (
+                {showBonusColumn && (
                   <td className="text-center py-2.5">
                     <span className="inline-block w-8 px-1 py-0.5 rounded bg-purple-100 text-purple-700 font-semibold text-xs">
                       {r.bonusPoints}
