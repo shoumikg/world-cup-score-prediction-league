@@ -80,6 +80,14 @@ html.dark {
 .dark .bg-gray-700 { background-color: #232a34; }
 .dark .hover\:bg-gray-700:hover { background-color: #2c3540; }
 
+/* Navigation progress bar: the bar is w-2/3 (66.67% of viewport). At -150%
+   translation its right edge is off-screen left; at +225% its left edge is
+   off-screen right. The animation sweeps it fully across the viewport. */
+@keyframes nav-loading {
+  from { transform: translateX(-150%); }
+  to   { transform: translateX(225%); }
+}
+
 /* Bare `border` / `divide-*` default to currentColor; give dark mode a subtle
    default so they don't track the (now light) text colour and glare. Explicit
    border-{colour} utilities still win — they live in the utilities layer, which
