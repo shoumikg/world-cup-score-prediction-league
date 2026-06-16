@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 import { logout } from "@/app/actions";
 import { FeedbackWidget } from "@/app/FeedbackWidget";
 import { ThemeToggle } from "@/app/ThemeToggle";
+import { NavLinks } from "@/app/NavLinks";
+import { NavigationProgress } from "@/app/NavigationProgress";
 import { WhatsNewModal } from "@/app/WhatsNewModal";
 import { unseenEntries } from "@/lib/changelog";
 import { Analytics } from "@vercel/analytics/next";
@@ -82,39 +84,16 @@ export default async function RootLayout({
                   </form>
                 </div>
               </div>
-              {/* Row 2: nav links — flex-wrap so future items spill to a new line */}
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pb-2 text-sm">
-                <Link href="/" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Schedule</Link>
-                {hasLive && (
-                  <Link href="/live" className="animate-pulse bg-green-500 text-white text-xs font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap">
-                    Live
-                  </Link>
-                )}
-                <Link href="/leaderboard" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Leaderboard</Link>
-                <Link href="/me" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">My Stats</Link>
-                <Link href="/groups" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Groups</Link>
-                <Link href="/guide" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Guide</Link>
-                <Link href="/bonus" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Bonus</Link>
-                <Link href="/bracket" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Bracket</Link>
-                <Link href="/compare" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Compare</Link>
-                <Link href="/whats-new" className="text-gray-600 hover:text-gray-900 whitespace-nowrap flex items-center gap-1">
-                  What&rsquo;s New
-                  {unseenCount > 0 && (
-                    <span className="inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-green-500 text-white text-[10px] font-bold leading-none">
-                      {unseenCount}
-                    </span>
-                  )}
-                </Link>
-                {profile?.is_admin && (
-                  <Link href="/admin" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Admin</Link>
-                )}
-                {profile?.is_admin && (
-                  <Link href="/admin/pending" className="text-gray-600 hover:text-gray-900 whitespace-nowrap">Pending</Link>
-                )}
-              </div>
+              {/* Row 2: nav links — client component for active-state highlighting */}
+              <NavLinks
+                isAdmin={!!profile?.is_admin}
+                hasLive={hasLive}
+                unseenCount={unseenCount}
+              />
             </div>
           </nav>
         )}
+        <NavigationProgress />
         <main className="flex-1">{children}</main>
         {user && unseenForModal.length > 0 && (
           <WhatsNewModal entries={unseenForModal} />
