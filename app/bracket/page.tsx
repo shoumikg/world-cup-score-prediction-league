@@ -1,3 +1,4 @@
+import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { scoreColor, stageLabel } from '@/lib/scoring'
 import { TeamLink } from '@/app/TeamLink'
@@ -36,9 +37,9 @@ function buildNode(
 }
 
 export default async function BracketPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return null
+  const supabase = await createClient()
 
   const [{ data: matchesRaw }, { data: predsRaw }] = await Promise.all([
     supabase.from('matches').select('*').neq('stage', 'group').order('kickoff_utc'),

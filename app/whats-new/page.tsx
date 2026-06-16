@@ -1,3 +1,5 @@
+import Link from 'next/link'
+import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { CHANGELOG, LATEST_CHANGELOG_ID, unseenEntries } from '@/lib/changelog'
 import { markWhatsNewSeen } from '@/app/actions'
@@ -5,9 +7,9 @@ import { markWhatsNewSeen } from '@/app/actions'
 export const dynamic = 'force-dynamic'
 
 export default async function WhatsNewPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return null
+  const supabase = await createClient()
 
   const { data: readRow } = await supabase
     .from('whats_new_reads')
@@ -25,7 +27,7 @@ export default async function WhatsNewPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
-      <a href="/" className="text-sm text-gray-400 hover:text-gray-600 mb-6 inline-block">← Back</a>
+      <Link href="/" className="text-sm text-gray-400 hover:text-gray-600 mb-6 inline-block">← Back</Link>
       <h1 className="text-xl font-bold mb-1">What&rsquo;s New</h1>
       <p className="text-sm text-gray-500 mb-6">Updates to the WC26 Predictor</p>
 

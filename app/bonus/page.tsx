@@ -1,3 +1,4 @@
+import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { predictionDeadlineUTC, formatKickoffIST } from '@/lib/time'
 import { GROUP_BONUS_QUESTIONS } from '@/lib/bonus'
@@ -9,10 +10,9 @@ import type { BonusAnswer, BonusGrade, BonusPickEntry, MatchEvent } from '@/lib/
 export const dynamic = 'force-dynamic'
 
 export default async function BonusPage() {
-  const supabase = await createClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return null // middleware will redirect
+  const supabase = await createClient()
 
   const [
     { data: firstGroupMatches },

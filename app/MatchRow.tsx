@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition, useRef, useEffect } from 'react'
+import Link from 'next/link'
 import { savePrediction } from '@/app/actions'
 import { stageLabel, scoreColor } from '@/lib/scoring'
 import { teamDisplay } from '@/lib/flags'
@@ -112,17 +113,17 @@ export function MatchRow({ match, prediction, isLocked, picks }: Props) {
   return (
     <div className="py-3 border-b last:border-0 relative isolate group">
       {/* Invisible full-row link — team names and interactive controls sit above it via z-10 */}
-      <a href={`/match/${match.id}`} className="absolute inset-0" aria-label={`Match ${match.id} detail`} />
+      <Link href={`/match/${match.id}`} className="absolute inset-0" aria-label={`Match ${match.id} detail`} />
       <div className="flex flex-col sm:flex-row sm:items-center gap-2">
         {/* Match meta + teams: stacked on mobile, inline on sm+ */}
         <div className="min-w-0 flex-1 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-400 w-6 text-right shrink-0">#{match.id}</span>
             {match.stage === 'group' && match.group_name ? (
-              <a href={`/groups/${match.group_name}`}
+              <Link href={`/groups/${match.group_name}`}
                 className="text-xs px-1.5 py-0.5 rounded font-medium shrink-0 bg-blue-100 text-blue-700 hover:bg-blue-200 relative z-10">
                 Group {match.group_name}
-              </a>
+              </Link>
             ) : (
               <span className="text-xs px-1.5 py-0.5 rounded font-medium shrink-0 bg-purple-100 text-purple-700">
                 {stageLabel(match.stage)}
@@ -135,17 +136,17 @@ export function MatchRow({ match, prediction, isLocked, picks }: Props) {
           {/* Team names — individually linked to filtered schedule, above the row overlay */}
           <span className="text-sm font-medium sm:min-w-0 relative z-10">
             {match.home_team ? (
-              <a href={`/?team=${encodeURIComponent(match.home_team)}`} className="hover:underline">
+              <Link href={`/?team=${encodeURIComponent(match.home_team)}`} className="hover:underline">
                 {homeName}
-              </a>
+              </Link>
             ) : (
               <span className="text-gray-400 italic">{homeName}</span>
             )}
             {' '}<span className="text-xs text-gray-400 font-normal">vs</span>{' '}
             {match.away_team ? (
-              <a href={`/?team=${encodeURIComponent(match.away_team)}`} className="hover:underline">
+              <Link href={`/?team=${encodeURIComponent(match.away_team)}`} className="hover:underline">
                 {awayName}
-              </a>
+              </Link>
             ) : (
               <span className="text-gray-400 italic">{awayName}</span>
             )}

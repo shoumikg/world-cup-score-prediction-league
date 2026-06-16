@@ -1,3 +1,5 @@
+import Link from 'next/link'
+import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { formatKickoffIST, isDeadlinePassed } from '@/lib/time'
 import { scoreOutcome, matchPoints } from '@/lib/scoring'
@@ -9,10 +11,9 @@ import type { Match, Prediction, PickEntry } from '@/lib/types'
 export const dynamic = 'force-dynamic'
 
 export default async function LivePage() {
-  const supabase = await createClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return null
+  const supabase = await createClient()
 
   const [{ data: matches }, { data: allPreds }, { data: profiles }] = await Promise.all([
     supabase.from('matches').select('*').eq('status', 'live').order('kickoff_utc'),
@@ -66,9 +67,9 @@ export default async function LivePage() {
       {liveMatches.length === 0 ? (
         <div className="bg-white rounded-xl border shadow-sm px-4 py-10 text-center">
           <p className="text-sm text-gray-500">No matches are live right now.</p>
-          <a href="/" className="mt-3 inline-block text-sm text-green-600 hover:underline">
+          <Link href="/" className="mt-3 inline-block text-sm text-green-600 hover:underline">
             View full schedule →
-          </a>
+          </Link>
         </div>
       ) : (
         <div className="bg-white rounded-xl border shadow-sm px-3 sm:px-4">

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { teamDisplay } from '@/lib/flags'
 import type { TableRow } from '@/lib/standings'
 
@@ -15,9 +16,9 @@ export function GroupTable({ group, rows, liveTeams, highlightTeam, groupPageLin
       <div className="flex items-center justify-between px-4 py-2.5 border-b bg-gray-50">
         <h2 className="text-sm font-bold">Group {group}</h2>
         {groupPageLink && (
-          <a href={`/groups/${encodeURIComponent(group)}`} className="text-xs text-gray-400 hover:text-gray-600">
+          <Link href={`/groups/${encodeURIComponent(group)}`} className="text-xs text-gray-400 hover:text-gray-600">
             All matches →
-          </a>
+          </Link>
         )}
       </div>
       <table className="w-full text-sm">
@@ -39,9 +40,9 @@ export function GroupTable({ group, rows, liveTeams, highlightTeam, groupPageLin
             <tr key={r.team} className={`border-t ${r.team === highlightTeam ? 'bg-blue-50 dark:bg-blue-500/15' : ''}`}>
               <td className="pl-4 py-2">
                 <span className="text-xs text-gray-400 w-4 inline-block">{i + 1}</span>
-                <a href={`/?team=${encodeURIComponent(r.team)}`} className="font-medium hover:underline decoration-gray-300">
+                <Link href={`/?team=${encodeURIComponent(r.team)}`} className="font-medium hover:underline decoration-gray-300">
                   {teamDisplay(r.team, r.team)}
-                </a>
+                </Link>
                 {liveTeams?.has(r.team) && (
                   <span className="ml-1.5 inline-block w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse align-middle" title="Playing now" />
                 )}

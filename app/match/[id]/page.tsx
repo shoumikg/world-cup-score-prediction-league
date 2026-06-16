@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation'
+import Link from 'next/link'
+import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { formatKickoffIST, isDeadlinePassed, predictionDeadlineUTC } from '@/lib/time'
 import { teamDisplay, teamFlag } from '@/lib/flags'
@@ -30,9 +32,9 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
   const matchId = parseInt(id, 10)
   if (isNaN(matchId)) notFound()
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return null
+  const supabase = await createClient()
 
   const [{ data: matchRaw }, { data: predsRaw }, { data: profilesRaw }, { data: eventsRaw }] = await Promise.all([
     supabase.from('matches').select('*').eq('id', matchId).single(),
@@ -134,7 +136,7 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
       <LiveRefresh hasLive={isLive} />
-      <a href="/" className="text-sm text-gray-400 hover:text-gray-600 mb-6 inline-block">← Schedule</a>
+      <Link href="/" className="text-sm text-gray-400 hover:text-gray-600 mb-6 inline-block">← Schedule</Link>
 
       {/* Match header */}
       <div className="bg-white rounded-xl border shadow-sm p-4 mb-4">
@@ -183,7 +185,7 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
                 Closes {formatKickoffIST(deadline.toISOString())} IST
                 <DeadlineCountdown deadlineISO={deadline.toISOString()} />
               </span>
-              <a href="/" className="text-xs text-green-600 hover:underline shrink-0">Edit →</a>
+              <Link href="/" className="text-xs text-green-600 hover:underline shrink-0">Edit →</Link>
             </>
           )}
         </div>

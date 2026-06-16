@@ -1,4 +1,6 @@
 import { notFound } from 'next/navigation'
+import Link from 'next/link'
+import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { computeGroupStandings } from '@/lib/standings'
 import { formatKickoffIST, isDeadlinePassed } from '@/lib/time'
@@ -13,9 +15,9 @@ export default async function GroupPage(props: { params: Promise<{ group: string
   const { group } = await props.params
   const groupName = group.toUpperCase()
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return null
+  const supabase = await createClient()
 
   const [{ data: matchesRaw }, { data: allPredsRaw }, { data: profilesRaw }] = await Promise.all([
     supabase.from('matches').select('*').eq('stage', 'group').eq('group_name', groupName).order('kickoff_utc'),
@@ -50,7 +52,7 @@ export default async function GroupPage(props: { params: Promise<{ group: string
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
       <LiveRefresh hasLive={hasLive} />
-      <a href="/groups" className="text-sm text-gray-400 hover:text-gray-600 mb-6 inline-block">← Group Tables</a>
+      <Link href="/groups" className="text-sm text-gray-400 hover:text-gray-600 mb-6 inline-block">← Group Tables</Link>
 
       <div className="mb-6">
         <GroupTable group={groupName} rows={groupRows} liveTeams={liveTeams} />

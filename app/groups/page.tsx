@@ -1,3 +1,4 @@
+import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { computeGroupStandings } from '@/lib/standings'
 import { GroupTable } from '@/app/GroupTable'
@@ -7,10 +8,9 @@ import type { Match } from '@/lib/types'
 export const dynamic = 'force-dynamic'
 
 export default async function GroupsPage() {
-  const supabase = await createClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return null // middleware will redirect
+  const supabase = await createClient()
 
   const { data: matches } = await supabase
     .from('matches')

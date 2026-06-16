@@ -1,3 +1,4 @@
+import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { scoreOutcome, scoreColor, stageLabel, matchPoints } from '@/lib/scoring'
 import { formatKickoffIST } from '@/lib/time'
@@ -12,9 +13,9 @@ export default async function ComparePage(props: {
 }) {
   const { a: rawA, b } = await props.searchParams
 
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return null
+  const supabase = await createClient()
 
   const [{ data: profilesRaw }, { data: matchesRaw }, { data: predsRaw }] = await Promise.all([
     supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),

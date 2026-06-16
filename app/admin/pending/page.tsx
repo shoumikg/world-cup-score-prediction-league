@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { istDateKey, formatKickoffIST, predictionDeadlineUTC } from '@/lib/time'
@@ -9,10 +10,9 @@ import type { Match, Prediction } from '@/lib/types'
 export const dynamic = 'force-dynamic'
 
 export default async function AdminPendingPage() {
-  const supabase = await createClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
+  const supabase = await createClient()
 
   const { data: profile } = await supabase
     .from('profiles')

@@ -1,3 +1,5 @@
+import Link from 'next/link'
+import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { istDateKey, formatDateIST, formatKickoffIST, isKickedOff, isDeadlinePassed, predictionDeadlineUTC } from '@/lib/time'
 import { computeGroupStandings } from '@/lib/standings'
@@ -17,10 +19,9 @@ export default async function SchedulePage(props: {
 }) {
   const { team: teamFilter } = await props.searchParams
 
-  const supabase = await createClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return null // middleware will redirect
+  const supabase = await createClient()
 
   const [{ data: matches }, { data: allPreds }, { data: profiles }, squads] = await Promise.all([
     supabase.from('matches').select('*').order('kickoff_utc'),
@@ -88,7 +89,7 @@ export default async function SchedulePage(props: {
             <p className="text-sm text-gray-500 mt-0.5">
               {teamFlag(teamFilter) && <span className="mr-1">{teamFlag(teamFilter)}</span>}
               {teamFilter}
-              <a href="/" className="ml-2 text-xs text-gray-400 hover:text-gray-600">✕ clear</a>
+              <Link href="/" className="ml-2 text-xs text-gray-400 hover:text-gray-600">✕ clear</Link>
             </p>
           )}
         </div>
