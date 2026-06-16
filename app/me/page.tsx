@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
+import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { scoreOutcome, matchPoints, OUTCOME_CLASSES } from '@/lib/scoring'
 import { teamFlag, teamDisplay } from '@/lib/flags'
@@ -27,9 +29,9 @@ const OUTCOME_DOT: Record<Outcome, string> = {
 }
 
 export default async function MePage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) redirect('/login')
+  const supabase = await createClient()
 
   const [
     { data: profileData },
@@ -440,7 +442,7 @@ export default async function MePage() {
       {totalScored === 0 && pendingCount === 0 && (
         <p className="text-sm text-gray-400 text-center py-6">
           No predictions yet.{' '}
-          <a href="/" className="underline hover:text-gray-600">Go to Schedule →</a>
+          <Link href="/" className="underline hover:text-gray-600">Go to Schedule →</Link>
         </p>
       )}
     </div>

@@ -1,3 +1,5 @@
+import Link from 'next/link'
+import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { computeLeaderboard } from '@/lib/leaderboard'
 import { computeBonusCorrectness, isGroupStageComplete } from '@/lib/bonusTracker'
@@ -23,10 +25,9 @@ export default async function LeaderboardPage(props: {
   // Controls th, td, and computeLeaderboard arg — must stay in sync.
   const showBonusColumn = showBonus && showLive
 
-  const supabase = await createClient()
-
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getAuthUser()
   if (!user) return null // middleware will redirect
+  const supabase = await createClient()
 
   // profiles: only safe columns — usernames must never reach this page.
   // bonus_answers and match_events are only needed when showing live data.
@@ -148,30 +149,30 @@ export default async function LeaderboardPage(props: {
 
       {/* Ranking basis toggle — view-only, switches via URL param */}
       <div className="mb-4 inline-flex rounded-lg border bg-gray-50 p-0.5 text-xs font-medium">
-        <a
+        <Link
           href="/leaderboard"
           className={`px-3 py-1.5 rounded-md transition-colors ${
             showLive && showBonus ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
           }`}
         >
           Live + Bonus
-        </a>
-        <a
+        </Link>
+        <Link
           href="/leaderboard?bonus=off"
           className={`px-3 py-1.5 rounded-md transition-colors ${
             showLive && !showBonus ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
           }`}
         >
           Match pts only
-        </a>
-        <a
+        </Link>
+        <Link
           href="/leaderboard?live=off"
           className={`px-3 py-1.5 rounded-md transition-colors ${
             !showLive ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
           }`}
         >
           Settled
-        </a>
+        </Link>
       </div>
 
       {hasLive && (
@@ -218,13 +219,13 @@ export default async function LeaderboardPage(props: {
                         {r.displayName}
                       </span>
                     ) : (
-                      <a
+                      <Link
                         href={`/compare?a=${encodeURIComponent(currentUserName)}&b=${encodeURIComponent(r.displayName)}`}
                         className="hover:underline decoration-gray-300"
                       >
                         <span className="mr-1.5">{teamFlag(r.favoriteTeam) ?? '🇮🇳'}</span>
                         {r.displayName}
-                      </a>
+                      </Link>
                     )}
                     {/* Form strip on its own line — always rendered (fixed height) so every row is the same height */}
                     <span className="flex gap-0.5 items-center h-2.5">
