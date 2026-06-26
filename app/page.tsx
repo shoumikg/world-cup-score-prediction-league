@@ -80,6 +80,60 @@ export default async function SchedulePage(props: {
   // Find next upcoming match for the anchor
   const nextMatch = visibleMatches.find(m => !isKickedOff(m.kickoff_utc))
 
+  // A day is "completed" once every match has kicked off and none is live.
+  // Completed days come first chronologically, so collapsing them tucks the
+  // finished group-stage clutter behind one expandable section and floats the
+  // live/upcoming days to the top.
+  const dayEntries = Array.from(groups.entries())
+  const isCompletedDay = (dayMatches: Match[]) =>
+    dayMatches.every(m => isKickedOff(m.kickoff_utc)) &&
+    !dayMatches.some(m => m.status === 'live')
+  const completedEntries = dayEntries.filter(([, dm]) => isCompletedDay(dm))
+  const upcomingEntries = dayEntries.filter(([, dm]) => !isCompletedDay(dm))
+  const completedMatchCount = completedEntries.reduce((n, [, dm]) => n + dm.length, 0)
+
+  const renderDay = (dateKey: string, dayMatches: Match[]) => {
+    const deadline = predictionDeadlineUTC(dayMatches[0].kickoff_utc)
+    const deadlinePassed = deadline <= new Date()
+    return (
+      <section key={dateKey} className="mb-8">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 sticky top-20 bg-gray-50 py-1 z-10 flex items-baseline justify-between flex-wrap gap-x-3">
+          <span>{formatDateIST(dayMatches[0].kickoff_utc)}</span>
+          <span className={`text-xs font-normal normal-case tracking-normal ${deadlinePassed ? 'text-red-400' : 'text-gray-400'}`}>
+            Deadline {formatKickoffIST(deadline.toISOString())} IST{deadlinePassed ? ' · closed' : <DeadlineCountdown deadlineISO={deadline.toISOString()} />}
+          </span>
+        </h2>
+        <div className="bg-white rounded-xl border shadow-sm px-3 sm:px-4">
+          {dayMatches.map(m => {
+            const picks: PickEntry[] | undefined = isDeadlinePassed(m.kickoff_utc)
+              ? profileList
+                  .map(profile => ({
+                    displayName: profile.display_name,
+                    favoriteTeam: profile.favorite_team,
+                    isSelf: profile.id === user.id,
+                    prediction: predByMatchUser.get(`${m.id}:${profile.id}`) ?? null,
+                  }))
+                  .sort((a, b) => a.displayName.localeCompare(b.displayName))
+              : undefined
+            return (
+              <div key={m.id} id={`match-${m.id}`} className="scroll-mt-28">
+                <div className="text-xs text-gray-400 pt-3 pb-1">
+                  {formatKickoffIST(m.kickoff_utc)} IST
+                </div>
+                <MatchRow
+                  match={m}
+                  prediction={predMap.get(m.id)}
+                  isLocked={isDeadlinePassed(m.kickoff_utc)}
+                  picks={picks}
+                />
+              </div>
+            )
+          })}
+        </div>
+      </section>
+    )
+  }
+
   return (
     <div className="max-w-4xl mx-auto px-3 sm:px-4 py-6">
       <LiveRefresh hasLive={hasLive} />
@@ -136,47 +190,24 @@ export default async function SchedulePage(props: {
         <span className="text-gray-300">group / knockout pts</span>
       </div>
 
-      {Array.from(groups.entries()).map(([dateKey, dayMatches]) => {
-        const deadline = predictionDeadlineUTC(dayMatches[0].kickoff_utc)
-        const deadlinePassed = deadline <= new Date()
-        return (
-          <section key={dateKey} className="mb-8">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3 sticky top-20 bg-gray-50 py-1 z-10 flex items-baseline justify-between flex-wrap gap-x-3">
-              <span>{formatDateIST(dayMatches[0].kickoff_utc)}</span>
-              <span className={`text-xs font-normal normal-case tracking-normal ${deadlinePassed ? 'text-red-400' : 'text-gray-400'}`}>
-                Deadline {formatKickoffIST(deadline.toISOString())} IST{deadlinePassed ? ' · closed' : <DeadlineCountdown deadlineISO={deadline.toISOString()} />}
-              </span>
-            </h2>
-            <div className="bg-white rounded-xl border shadow-sm px-3 sm:px-4">
-              {dayMatches.map(m => {
-                const picks: PickEntry[] | undefined = isDeadlinePassed(m.kickoff_utc)
-                  ? profileList
-                      .map(profile => ({
-                        displayName: profile.display_name,
-                        favoriteTeam: profile.favorite_team,
-                        isSelf: profile.id === user.id,
-                        prediction: predByMatchUser.get(`${m.id}:${profile.id}`) ?? null,
-                      }))
-                      .sort((a, b) => a.displayName.localeCompare(b.displayName))
-                  : undefined
-                return (
-                  <div key={m.id} id={`match-${m.id}`} className="scroll-mt-28">
-                    <div className="text-xs text-gray-400 pt-3 pb-1">
-                      {formatKickoffIST(m.kickoff_utc)} IST
-                    </div>
-                    <MatchRow
-                      match={m}
-                      prediction={predMap.get(m.id)}
-                      isLocked={isDeadlinePassed(m.kickoff_utc)}
-                      picks={picks}
-                    />
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-        )
-      })}
+      {completedEntries.length > 0 && (
+        <details className="group mb-8">
+          <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center justify-between gap-3 rounded-xl border bg-white px-4 py-3 shadow-sm hover:bg-gray-50 transition-colors text-sm font-semibold text-gray-700">
+            <span className="flex items-center gap-2">
+              <span className="text-gray-400 transition-transform group-open:rotate-90">▸</span>
+              Completed matches
+            </span>
+            <span className="text-xs font-normal text-gray-400">
+              {completedMatchCount} match{completedMatchCount !== 1 ? 'es' : ''} · tap to view
+            </span>
+          </summary>
+          <div className="mt-6">
+            {completedEntries.map(([dateKey, dayMatches]) => renderDay(dateKey, dayMatches))}
+          </div>
+        </details>
+      )}
+
+      {upcomingEntries.map(([dateKey, dayMatches]) => renderDay(dateKey, dayMatches))}
     </div>
   )
 }
