@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllPredictions } from '@/lib/predictions'
 import { computeLeaderboard } from '@/lib/leaderboard'
 import { computeBonusCorrectness, isGroupStageComplete } from '@/lib/bonusTracker'
 import { teamFlag } from '@/lib/flags'
@@ -34,14 +35,14 @@ export default async function LeaderboardPage(props: {
   const [
     { data: profiles },
     { data: matches },
-    { data: preds },
+    preds,
     { data: grades },
     { data: bonusAnswers },
     { data: events },
   ] = await Promise.all([
     supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
     supabase.from('matches').select('*'),  // all matches (group-complete check needs unscored too)
-    supabase.from('predictions').select('*'),
+    fetchAllPredictions(supabase),
     supabase.from('bonus_grades').select('user_id, question_id, confirmed_answer'),
     showLive
       ? supabase.from('bonus_answers').select('*')

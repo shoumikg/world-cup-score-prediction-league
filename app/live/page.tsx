@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllPredictions } from '@/lib/predictions'
 import { formatKickoffIST, isDeadlinePassed } from '@/lib/time'
 import { scoreOutcome, matchPoints } from '@/lib/scoring'
 import { MatchRow } from '@/app/MatchRow'
@@ -15,9 +16,9 @@ export default async function LivePage() {
   if (!user) return null
   const supabase = await createClient()
 
-  const [{ data: matches }, { data: allPreds }, { data: profiles }] = await Promise.all([
+  const [{ data: matches }, allPreds, { data: profiles }] = await Promise.all([
     supabase.from('matches').select('*').eq('status', 'live').order('kickoff_utc'),
-    supabase.from('predictions').select('*'),
+    fetchAllPredictions(supabase),
     supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
   ])
 

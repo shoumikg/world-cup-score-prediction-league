@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
+import { fetchAllPredictions } from '@/lib/predictions'
 import { istDateKey, formatKickoffIST, predictionDeadlineUTC } from '@/lib/time'
 import { teamFlag } from '@/lib/flags'
 import { TeamLink } from '@/app/TeamLink'
@@ -25,9 +26,9 @@ export default async function AdminPendingPage() {
   // Predictions fetched via service-role client to bypass RLS — allows
   // the admin to see who has/hasn't predicted before the deadline.
   const db = getAdminClient()
-  const [{ data: matches }, { data: preds }, { data: profiles }] = await Promise.all([
+  const [{ data: matches }, preds, { data: profiles }] = await Promise.all([
     supabase.from('matches').select('*').order('kickoff_utc'),
-    db.from('predictions').select('user_id, match_id, home_pred, away_pred'),
+    fetchAllPredictions(db, 'user_id, match_id, home_pred, away_pred'),
     supabase.from('profiles')
       .select('id, display_name, favorite_team')
       .eq('is_admin', false)

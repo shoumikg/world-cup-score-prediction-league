@@ -43,7 +43,7 @@ export default async function BracketPage() {
 
   const [{ data: matchesRaw }, { data: predsRaw }] = await Promise.all([
     supabase.from('matches').select('*').neq('stage', 'group').order('kickoff_utc'),
-    supabase.from('predictions').select('*'),
+    supabase.from('predictions').select('*').eq('user_id', user.id), // bracket only shows own picks
   ])
 
   const matches = (matchesRaw ?? []) as Match[]

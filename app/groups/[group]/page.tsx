@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllPredictions } from '@/lib/predictions'
 import { computeGroupStandings } from '@/lib/standings'
 import { formatKickoffIST, isDeadlinePassed } from '@/lib/time'
 import { MatchRow } from '@/app/MatchRow'
@@ -19,9 +20,9 @@ export default async function GroupPage(props: { params: Promise<{ group: string
   if (!user) return null
   const supabase = await createClient()
 
-  const [{ data: matchesRaw }, { data: allPredsRaw }, { data: profilesRaw }] = await Promise.all([
+  const [{ data: matchesRaw }, allPredsRaw, { data: profilesRaw }] = await Promise.all([
     supabase.from('matches').select('*').eq('stage', 'group').eq('group_name', groupName).order('kickoff_utc'),
-    supabase.from('predictions').select('*'),
+    fetchAllPredictions(supabase),
     supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
   ])
 
@@ -30,7 +31,7 @@ export default async function GroupPage(props: { params: Promise<{ group: string
 
   const predMap = new Map<number, Prediction>()
   const predByMatchUser = new Map<string, { homePred: number; awayPred: number }>()
-  for (const p of (allPredsRaw ?? []) as Prediction[]) {
+  for (const p of allPredsRaw) {
     if (p.user_id === user.id) predMap.set(p.match_id, p)
     predByMatchUser.set(`${p.match_id}:${p.user_id}`, { homePred: p.home_pred, awayPred: p.away_pred })
   }
