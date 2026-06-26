@@ -1,5 +1,6 @@
 import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllPredictions } from '@/lib/predictions'
 import { scoreOutcome, scoreColor, stageLabel, matchPoints } from '@/lib/scoring'
 import { formatKickoffIST } from '@/lib/time'
 import { teamFlag } from '@/lib/flags'
@@ -17,16 +18,16 @@ export default async function ComparePage(props: {
   if (!user) return null
   const supabase = await createClient()
 
-  const [{ data: profilesRaw }, { data: matchesRaw }, { data: predsRaw }] = await Promise.all([
+  const [{ data: profilesRaw }, { data: matchesRaw }, predsRaw] = await Promise.all([
     supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
     supabase.from('matches').select('*').order('kickoff_utc'),
-    supabase.from('predictions').select('*'),
+    fetchAllPredictions(supabase),
   ])
 
   type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
   const allProfiles = ((profilesRaw ?? []) as ProfileRow[]).filter(p => !p.is_admin)
   const allMatches  = (matchesRaw  ?? []) as Match[]
-  const allPreds    = (predsRaw    ?? []) as Prediction[]
+  const allPreds    = predsRaw
 
   const currentUserProfile = allProfiles.find(p => p.id === user.id)
   const a = rawA ?? currentUserProfile?.display_name

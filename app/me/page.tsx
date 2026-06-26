@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllPredictions } from '@/lib/predictions'
 import { scoreOutcome, matchPoints, OUTCOME_CLASSES } from '@/lib/scoring'
 import { teamFlag, teamDisplay } from '@/lib/flags'
 import { formatKickoffIST } from '@/lib/time'
@@ -39,7 +40,7 @@ export default async function MePage() {
     { data: myPredsRaw },
     { data: myBonusAnswersRaw },
     { data: eventsRaw },
-    { data: allPredsRaw },
+    allPredsRaw,
     { data: allBonusAnswersRaw },
     { data: allGradesRaw },
     { data: allProfilesRaw },
@@ -49,7 +50,7 @@ export default async function MePage() {
     supabase.from('predictions').select('*').eq('user_id', user.id),
     supabase.from('bonus_answers').select('*').eq('user_id', user.id),
     supabase.from('match_events').select('*'),
-    supabase.from('predictions').select('*'),
+    fetchAllPredictions(supabase),
     supabase.from('bonus_answers').select('*'),
     supabase.from('bonus_grades').select('user_id, question_id, confirmed_answer'),
     supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),

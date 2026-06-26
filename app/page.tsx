@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllPredictions } from '@/lib/predictions'
 import { istDateKey, formatDateIST, formatKickoffIST, isKickedOff, isDeadlinePassed, predictionDeadlineUTC } from '@/lib/time'
 import { computeGroupStandings } from '@/lib/standings'
 import { MatchRow } from '@/app/MatchRow'
@@ -23,9 +24,9 @@ export default async function SchedulePage(props: {
   if (!user) return null // middleware will redirect
   const supabase = await createClient()
 
-  const [{ data: matches }, { data: allPreds }, { data: profiles }, squads] = await Promise.all([
+  const [{ data: matches }, allPreds, { data: profiles }, squads] = await Promise.all([
     supabase.from('matches').select('*').order('kickoff_utc'),
-    supabase.from('predictions').select('*'), // RLS: own always + others' after deadline
+    fetchAllPredictions(supabase), // RLS: own always + others' after deadline
     supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
     // Squads only needed when filtering by team; silently null on error so the
     // rest of the page never fails because of the openfootball CDN.
