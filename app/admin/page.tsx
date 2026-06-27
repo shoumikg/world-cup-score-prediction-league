@@ -8,6 +8,7 @@ import { TeamLink } from '@/app/TeamLink'
 import { rankQualifiedThirds } from '@/lib/knockout'
 import { AdminResultForm } from './AdminResultForm'
 import { AdminKnockoutForm } from './AdminKnockoutForm'
+import { AdminKickoffForm } from './AdminKickoffForm'
 import { AdminKnockoutAutofill } from './AdminKnockoutAutofill'
 import { AdminMatchEventsForm } from './AdminMatchEventsForm'
 import type { Match, MatchEvent } from '@/lib/types'
@@ -56,6 +57,10 @@ export default async function AdminPage() {
     .filter(m => isKickedOff(m.kickoff_utc))
     .sort((a, b) => b.kickoff_utc.localeCompare(a.kickoff_utc))
   const knockouts = all.filter(m => m.stage !== 'group' && (!m.home_team || !m.away_team))
+  // Every knockout match, for editing kickoff times regardless of team status.
+  const allKnockouts = all
+    .filter(m => m.stage !== 'group')
+    .sort((a, b) => a.kickoff_utc.localeCompare(b.kickoff_utc))
 
   // Ranked third-placed teams to help the admin fill the 8 "Best 3rd" R32 slots,
   // which aren't auto-assigned (FIFA's combination table decides which slot each
@@ -147,6 +152,33 @@ export default async function AdminPage() {
                   <span className="text-xs text-gray-400 ml-auto">{formatKickoffIST(m.kickoff_utc)} IST</span>
                 </div>
                 <AdminKnockoutForm match={m} />
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Knockout kickoff times — editable for every knockout match */}
+      <section>
+        <h2 className="text-base font-semibold mb-3 text-gray-700">Knockout Kickoff Times</h2>
+        {allKnockouts.length === 0 ? (
+          <p className="text-sm text-gray-400">No knockout matches.</p>
+        ) : (
+          <div className="bg-white rounded-xl border shadow-sm divide-y px-4">
+            {allKnockouts.map(m => (
+              <div key={m.id} className="py-3 flex flex-wrap items-center gap-x-2 gap-y-2">
+                <span className="text-xs text-gray-400">#{m.id}</span>
+                <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-medium">
+                  {m.stage.toUpperCase()}
+                </span>
+                <span className="text-sm font-medium">
+                  <TeamLink team={m.home_team} fallback={m.home_source ?? ''} />
+                  {' '}vs{' '}
+                  <TeamLink team={m.away_team} fallback={m.away_source ?? ''} />
+                </span>
+                <div className="ml-auto">
+                  <AdminKickoffForm matchId={m.id} kickoffUtc={m.kickoff_utc} />
+                </div>
               </div>
             ))}
           </div>

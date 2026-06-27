@@ -319,6 +319,42 @@ export async function saveKnockoutTeams(
   return {}
 }
 
+// Admin-only: adjust a knockout match's kickoff (and therefore its prediction
+// deadline). Separate from saveKnockoutTeams so the time can be fixed for any
+// knockout match — including ones whose teams are already filled (manually or by
+// auto-fill) and so no longer appear in the team-fill list.
+export async function saveKnockoutKickoff(
+  matchId: number,
+  kickoffUtc: string
+): Promise<{ error?: string }> {
+  if (!Number.isInteger(matchId)) return { error: 'Invalid match.' }
+  const when = new Date(kickoffUtc)
+  if (isNaN(when.getTime())) return { error: 'Invalid kickoff time.' }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile?.is_admin) return { error: 'Unauthorized.' }
+
+  const { error } = await supabase
+    .from('matches')
+    .update({ kickoff_utc: when.toISOString() })
+    .eq('id', matchId)
+
+  if (error) return { error: error.message }
+  revalidatePath('/')
+  revalidatePath('/admin')
+  revalidatePath('/bracket')
+  return {}
+}
+
 // ── Match events (goal scorers) ───────────────────────────────────────────────
 
 // Admin-only: add a goal-scorer event for a live or past match. Mirrors what the
