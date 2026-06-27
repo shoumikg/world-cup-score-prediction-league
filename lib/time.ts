@@ -32,6 +32,16 @@ export function isKickedOff(utc: string): boolean {
   return new Date(utc) <= new Date()
 }
 
+// datetime-local <-> UTC conversion for admin editing in IST wall-clock time
+// (IST has no DST, so the fixed offset is exact).
+export function utcToISTInput(utc: string): string {
+  return new Date(new Date(utc).getTime() + IST_OFFSET_MS).toISOString().slice(0, 16)
+}
+
+export function istInputToUTC(local: string): string {
+  return new Date(new Date(local + ':00Z').getTime() - IST_OFFSET_MS).toISOString()
+}
+
 // Returns the prediction deadline for a match's IST calendar day:
 // 9 PM IST on the calendar day before. All matches on the same IST day share
 // one deadline — predictions for the whole day close at once.
