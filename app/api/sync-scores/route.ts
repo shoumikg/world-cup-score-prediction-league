@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import { fetchTodayMatches, normalizeTeamName, mapStatus } from '@/lib/football-data'
+import { propagateKnockouts } from '@/lib/knockout'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -131,8 +132,15 @@ export async function GET(req: NextRequest) {
     if (error) errors.push(`match ${u.id}: ${error.message}`)
   }
 
+  // A synced result may decide a group or an earlier knockout round — fill any
+  // dependent slots that are now resolvable. Only fills null slots, so admin
+  // overrides are preserved. Once a knockout's teams are filled, the next sync
+  // can match its fixture and pull its score.
+  const { filled } = await propagateKnockouts(db)
+
   return NextResponse.json({
     updated: updates.length,
+    ...(filled         && { knockoutsFilled: filled }),
     ...(errors.length    && { errors }),
     ...(unmatched.length && { unmatched }),
   })

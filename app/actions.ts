@@ -8,6 +8,7 @@ import { validateDisplayName, validateFavoriteTeam } from '@/lib/profile'
 import { predictionDeadlineUTC } from '@/lib/time'
 import { validateBonusAnswer } from '@/lib/bonus'
 import { validateMatchEvent } from '@/lib/matchEvent'
+import { propagateKnockouts } from '@/lib/knockout'
 import { LATEST_CHANGELOG_ID } from '@/lib/changelog'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
@@ -247,9 +248,40 @@ export async function saveResult(
     .eq('id', matchId)
 
   if (error) return { error: error.message }
+
+  // A new result may decide a group or an earlier knockout round — fill any
+  // dependent slots that are now resolvable (never overwrites a filled slot).
+  await propagateKnockouts(supabase)
+
   revalidatePath('/')
   revalidatePath('/admin')
+  revalidatePath('/bracket')
   return {}
+}
+
+// Admin-only: force a knockout auto-fill pass. Covers the initial backfill (when
+// groups are already complete before this ran) and any time the admin wants to
+// re-derive slots after entering results. Only fills null slots — overrides are
+// preserved. Corrections to an already-filled slot use the override form.
+export async function runKnockoutAutofill(): Promise<{ error?: string; filled?: number }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', user.id)
+    .single()
+
+  if (!profile?.is_admin) return { error: 'Unauthorized.' }
+
+  const { filled } = await propagateKnockouts(supabase)
+
+  revalidatePath('/')
+  revalidatePath('/admin')
+  revalidatePath('/bracket')
+  return { filled }
 }
 
 export async function saveKnockoutTeams(
