@@ -83,9 +83,11 @@ export default async function SchedulePage(props: {
   // A day is "completed" once every match has kicked off and none is live.
   // Completed days come first chronologically, so collapsing them tucks the
   // finished group-stage clutter behind one expandable section and floats the
-  // live/upcoming days to the top.
+  // live/upcoming days to the top. The team-filter view skips this — when a user
+  // is looking at a single team, all of its matches stay expanded.
   const dayEntries = Array.from(groups.entries())
   const isCompletedDay = (dayMatches: Match[]) =>
+    !teamFilter &&
     dayMatches.every(m => isKickedOff(m.kickoff_utc)) &&
     !dayMatches.some(m => m.status === 'live')
   const completedEntries = dayEntries.filter(([, dm]) => isCompletedDay(dm))
