@@ -1,5 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { istDateKey, isKickedOff, kickoffTimerDelay, predictionDeadlineUTC, isDeadlinePassed } from '../lib/time'
+import { istDateKey, isKickedOff, kickoffTimerDelay, predictionDeadlineUTC, isDeadlinePassed, utcToISTInput, istInputToUTC } from '../lib/time'
+
+describe('IST datetime-local conversion', () => {
+  it('renders a UTC instant as IST wall-clock for the input', () => {
+    // 17:00 UTC + 5:30 = 22:30 IST
+    expect(utcToISTInput('2026-07-04T17:00:00Z')).toBe('2026-07-04T22:30')
+  })
+
+  it('converts an IST input back to the UTC instant', () => {
+    expect(istInputToUTC('2026-07-04T22:30')).toBe('2026-07-04T17:00:00.000Z')
+  })
+
+  it('round-trips and handles the day boundary (IST ahead of UTC)', () => {
+    const utc = '2026-07-04T20:00:00.000Z' // 01:30 IST on July 5
+    expect(utcToISTInput(utc)).toBe('2026-07-05T01:30')
+    expect(istInputToUTC(utcToISTInput(utc))).toBe(utc)
+  })
+})
 
 describe('istDateKey', () => {
   it('returns the UTC date for a match well within the same IST day', () => {

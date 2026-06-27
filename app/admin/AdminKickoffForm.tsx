@@ -2,10 +2,11 @@
 
 import { useState, useTransition } from 'react'
 import { saveKnockoutKickoff } from '@/app/actions'
+import { utcToISTInput, istInputToUTC } from '@/lib/time'
 
-// The datetime-local value is read and written as UTC, matching AdminKnockoutForm.
+// The datetime-local value is shown and entered in IST wall-clock time.
 export function AdminKickoffForm({ matchId, kickoffUtc }: { matchId: number; kickoffUtc: string }) {
-  const [kickoff, setKickoff] = useState(new Date(kickoffUtc).toISOString().slice(0, 16))
+  const [kickoff, setKickoff] = useState(utcToISTInput(kickoffUtc))
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -15,7 +16,7 @@ export function AdminKickoffForm({ matchId, kickoffUtc }: { matchId: number; kic
       return
     }
     startTransition(async () => {
-      const res = await saveKnockoutKickoff(matchId, new Date(kickoff + ':00Z').toISOString())
+      const res = await saveKnockoutKickoff(matchId, istInputToUTC(kickoff))
       setMsg(res.error ? { text: res.error, ok: false } : { text: 'Saved!', ok: true })
     })
   }
@@ -26,8 +27,9 @@ export function AdminKickoffForm({ matchId, kickoffUtc }: { matchId: number; kic
         type="datetime-local" value={kickoff} onChange={e => setKickoff(e.target.value)}
         disabled={isPending}
         className="border rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-        title="Kickoff (UTC)"
+        title="Kickoff (IST)"
       />
+      <span className="text-xs text-gray-400">IST</span>
       <button
         onClick={handleSave}
         disabled={isPending}
