@@ -5,8 +5,10 @@ import { formatKickoffIST, isKickedOff } from '@/lib/time'
 import { teamDisplay } from '@/lib/flags'
 import { fetchSquads, normalizeOFTeamName } from '@/lib/openfootball'
 import { TeamLink } from '@/app/TeamLink'
+import { rankQualifiedThirds } from '@/lib/knockout'
 import { AdminResultForm } from './AdminResultForm'
 import { AdminKnockoutForm } from './AdminKnockoutForm'
+import { AdminKnockoutAutofill } from './AdminKnockoutAutofill'
 import { AdminMatchEventsForm } from './AdminMatchEventsForm'
 import type { Match, MatchEvent } from '@/lib/types'
 import type { OFPlayer } from '@/lib/openfootball'
@@ -53,7 +55,12 @@ export default async function AdminPage() {
   const started = all
     .filter(m => isKickedOff(m.kickoff_utc))
     .sort((a, b) => b.kickoff_utc.localeCompare(a.kickoff_utc))
-  const knockouts = all.filter(m => m.stage !== 'group' && !m.home_team)
+  const knockouts = all.filter(m => m.stage !== 'group' && (!m.home_team || !m.away_team))
+
+  // Ranked third-placed teams to help the admin fill the 8 "Best 3rd" R32 slots,
+  // which aren't auto-assigned (FIFA's combination table decides which slot each
+  // qualifying third lands in). Only shown once there's at least one to rank.
+  const thirds = rankQualifiedThirds(all)
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-10">
@@ -95,6 +102,34 @@ export default async function AdminPage() {
       {/* Knockout team fill */}
       <section>
         <h2 className="text-base font-semibold mb-3 text-gray-700">Fill Knockout Teams</h2>
+
+        <div className="mb-4">
+          <AdminKnockoutAutofill />
+        </div>
+
+        {thirds.length > 0 && (
+          <div className="mb-4 bg-white rounded-xl border shadow-sm p-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-1">Third-placed teams · ranked</h3>
+            <p className="text-xs text-gray-400 mb-3">
+              Top 8 qualify for the round of 32. Use these to fill the “Best 3rd (…)” slots below —
+              each slot’s label lists which groups it may draw from.
+            </p>
+            <div className="divide-y">
+              {thirds.map((r, i) => (
+                <div key={r.team} className={`flex items-center gap-3 py-1.5 text-sm ${r.qualifies ? '' : 'opacity-50'}`}>
+                  <span className="w-5 text-xs text-gray-400 text-right">{i + 1}</span>
+                  <span className="w-6 text-xs px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-medium text-center">{r.group}</span>
+                  <span className="flex-1 font-medium">{teamDisplay(r.team, r.team)}</span>
+                  <span className="text-xs text-gray-400 tabular-nums">{r.pts} pts · GD {r.gd >= 0 ? '+' : ''}{r.gd} · GF {r.gf}</span>
+                  {r.qualifies
+                    ? <span className="text-xs font-medium text-green-600 w-16 text-right">qualifies</span>
+                    : <span className="text-xs text-gray-400 w-16 text-right">out</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {knockouts.length === 0 ? (
           <p className="text-sm text-gray-400">All knockout teams are filled in.</p>
         ) : (
