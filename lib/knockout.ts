@@ -113,61 +113,6 @@ export function computeKnockoutFills(
   return [...fills.entries()].map(([id, sides]) => ({ id, ...sides }))
 }
 
-// ── Bracket halves (for the finalists bonus) ──────────────────────────────
-//
-// The final (M104) is "Winner of SF-A" vs "Winner of SF-B". Each half of the
-// draw is the subtree feeding one semi-final. Two teams in the same half must
-// meet before the final, so they can't both be finalists — the finalists are
-// always one team from each half. We derive each placed knockout team's half by
-// tracing the bracket structure (the seeded source labels), independent of
-// results.
-
-const MATCH_REF_RE = /M(\d+)/
-
-function matchRef(source: string | null): number | null {
-  if (!source) return null
-  const m = source.match(MATCH_REF_RE)
-  return m ? parseInt(m[1], 10) : null
-}
-
-/** Maps each knockout match id to its half ('A'/'B') of the draw. */
-function halfByMatch(matches: Match[]): Map<number, 'A' | 'B'> {
-  const byId = new Map(matches.map(m => [m.id, m]))
-  const half = new Map<number, 'A' | 'B'>()
-  const final = matches.find(m => m.stage === 'final')
-  if (!final) return half
-
-  const assign = (id: number | null, h: 'A' | 'B') => {
-    if (id === null || half.has(id)) return
-    half.set(id, h)
-    const m = byId.get(id)
-    if (!m) return
-    assign(matchRef(m.home_source), h)
-    assign(matchRef(m.away_source), h)
-  }
-  assign(matchRef(final.home_source), 'A')
-  assign(matchRef(final.away_source), 'B')
-  return half
-}
-
-/**
- * Maps each team currently placed in the round of 32 to its half of the draw.
- * Used to validate finalist picks (the two must come from opposite halves) and
- * to filter the second team selector.
- */
-export function bracketHalves(matches: Match[]): Map<string, 'A' | 'B'> {
-  const byMatch = halfByMatch(matches)
-  const teamHalf = new Map<string, 'A' | 'B'>()
-  for (const m of matches) {
-    if (m.stage !== 'r32') continue
-    const h = byMatch.get(m.id)
-    if (!h) continue
-    if (m.home_team) teamHalf.set(m.home_team, h)
-    if (m.away_team) teamHalf.set(m.away_team, h)
-  }
-  return teamHalf
-}
-
 export interface ThirdPlaceRow extends TableRow {
   group: string
   qualifies: boolean

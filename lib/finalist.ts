@@ -1,21 +1,24 @@
 import type { Match, FinalistPrediction } from './types'
-import { bracketHalves } from './knockout'
 import { FINALIST_QUESTION_IDS } from './bonus'
 
 // Knockout "predict the two finalists" bonus: 25 pts per team that reaches the
 // final → 50 / 25 / 0. Graded automatically from the final match once both
 // finalists are known; no manual admin step.
 
-export interface FinalistOption {
-  team: string
-  half: 'A' | 'B'
+/** The teams playing in the round of 32 — the pool a finalist can be picked from. */
+function r32Teams(matches: Match[]): Set<string> {
+  const teams = new Set<string>()
+  for (const m of matches) {
+    if (m.stage !== 'r32') continue
+    if (m.home_team) teams.add(m.home_team)
+    if (m.away_team) teams.add(m.away_team)
+  }
+  return teams
 }
 
-/** Teams that can be picked, each tagged with its half of the draw, name-sorted. */
-export function finalistOptions(matches: Match[]): FinalistOption[] {
-  return [...bracketHalves(matches).entries()]
-    .map(([team, half]) => ({ team, half }))
-    .sort((a, b) => a.team.localeCompare(b.team))
+/** Pickable teams (round of 32 participants), name-sorted. */
+export function finalistOptions(matches: Match[]): string[] {
+  return [...r32Teams(matches)].sort((a, b) => a.localeCompare(b))
 }
 
 type ValidationResult =
@@ -23,9 +26,8 @@ type ValidationResult =
   | { error: string }
 
 /**
- * Validates a finalist pick against the live bracket. Both teams must be placed
- * in the round of 32, distinct, and from opposite halves of the draw (else they
- * would meet before the final and couldn't both be finalists).
+ * Validates a finalist pick. Both teams must be in the round of 32 and distinct.
+ * Any two different R32 teams are allowed (no bracket-half restriction).
  */
 export function validateFinalistPrediction(
   rawA: string | null | undefined,
@@ -37,12 +39,9 @@ export function validateFinalistPrediction(
   if (!teamA || !teamB) return { error: 'Pick both finalists.' }
   if (teamA === teamB) return { error: 'Pick two different teams.' }
 
-  const halves = bracketHalves(matches)
-  const ha = halves.get(teamA)
-  const hb = halves.get(teamB)
-  if (!ha) return { error: `${teamA} is not in the knockout bracket.` }
-  if (!hb) return { error: `${teamB} is not in the knockout bracket.` }
-  if (ha === hb) return { error: 'Those two teams are in the same half and would meet before the final.' }
+  const teams = r32Teams(matches)
+  if (!teams.has(teamA)) return { error: `${teamA} is not in the knockout bracket.` }
+  if (!teams.has(teamB)) return { error: `${teamB} is not in the knockout bracket.` }
 
   return { teamA, teamB }
 }
