@@ -69,19 +69,34 @@ export default async function BracketPage() {
     )
   }
 
-  const tree = buildNode(finalMatch, byId, predMap)
+  // Split the draw at the final: one semi-final feeds from each side. The left
+  // half is rendered left → right, the right half mirrored (right → left), so
+  // both halves converge on the final in the centre.
+  const sf1Id = feederMatchId(finalMatch.home_source)
+  const sf2Id = feederMatchId(finalMatch.away_source)
+  const sf1 = sf1Id !== null ? byId.get(sf1Id) : undefined
+  const sf2 = sf2Id !== null ? byId.get(sf2Id) : undefined
+  const leftTree  = sf1 ? buildNode(sf1, byId, predMap) : null
+  const rightTree = sf2 ? buildNode(sf2, byId, predMap) : null
 
   return (
     <div className="px-4 py-6">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-xl font-bold mb-1">Knockout Bracket</h1>
         <p className="text-sm text-gray-500 mb-6">
-          Read left → right. Your pick is shown in each cell; colours apply once results are in.
+          Both halves of the draw work inward to the final in the middle. Your pick is shown in each
+          cell; colours apply once results are in.
         </p>
       </div>
       <div className="overflow-x-auto pb-4">
-        <div className="inline-flex">
-          <BracketTree node={tree} />
+        <div className="inline-flex items-center">
+          {leftTree && <BracketTree node={leftTree} />}
+          {leftTree && <div className="w-5 border-t border-gray-200 shrink-0" />}
+          <div className="shrink-0">
+            <MatchCell match={finalMatch} pred={predMap.get(finalMatch.id)} />
+          </div>
+          {rightTree && <div className="w-5 border-t border-gray-200 shrink-0" />}
+          {rightTree && <BracketTreeMirrored node={rightTree} />}
         </div>
       </div>
       {thirdMatch && (
@@ -124,6 +139,42 @@ function BracketTree({ node }: { node: BracketNode }) {
       {/* Current match, centred in the combined height of its feeders */}
       <div className="flex items-center shrink-0">
         <MatchCell match={node.match} pred={node.pred} />
+      </div>
+    </div>
+  )
+}
+
+// Mirror of BracketTree for the right half of the draw: the match sits on the
+// left, its feeders fan out to the right, and the connector closes leftward — so
+// rounds read right → left, converging on the final at the centre.
+function BracketTreeMirrored({ node }: { node: BracketNode }) {
+  const isLeaf = !node.topFeeder && !node.bottomFeeder
+  if (isLeaf) {
+    return (
+      <div className="flex items-center py-1">
+        <MatchCell match={node.match} pred={node.pred} />
+      </div>
+    )
+  }
+  return (
+    <div className="flex items-stretch">
+      {/* Current match, centred in the combined height of its feeders */}
+      <div className="flex items-center shrink-0">
+        <MatchCell match={node.match} pred={node.pred} />
+      </div>
+      {/* Connector: top half closes down-left, bottom half closes up-left */}
+      <div className="w-4 shrink-0 self-stretch flex flex-col">
+        <div className="flex-1 border-l border-b border-gray-200" />
+        <div className="flex-1 border-l border-t border-gray-200" />
+      </div>
+      {/* Right: two sub-trees stacked */}
+      <div className="flex flex-col">
+        {node.topFeeder
+          ? <BracketTreeMirrored node={node.topFeeder} />
+          : <div className="flex-1" />}
+        {node.bottomFeeder
+          ? <BracketTreeMirrored node={node.bottomFeeder} />
+          : <div className="flex-1" />}
       </div>
     </div>
   )
