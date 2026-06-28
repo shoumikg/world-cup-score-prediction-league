@@ -1,6 +1,6 @@
 import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
-import { scoreColor, stageLabel } from '@/lib/scoring'
+import { scoreColor, stageLabel, displayScore } from '@/lib/scoring'
 import { TeamLink } from '@/app/TeamLink'
 import type { Match, Prediction } from '@/lib/types'
 
@@ -183,6 +183,7 @@ function BracketTreeMirrored({ node }: { node: BracketNode }) {
 function MatchCell({ match, pred }: { match: Match; pred: Prediction | undefined }) {
   const hasResult   = match.home_score !== null
   const isPlaceholder = !match.home_team
+  const shown = displayScore(match)
 
   return (
     <div className="w-36 border rounded-lg bg-white shadow-sm p-2.5 text-xs shrink-0">
@@ -194,13 +195,13 @@ function MatchCell({ match, pred }: { match: Match; pred: Prediction | undefined
           <span className={`truncate ${isPlaceholder ? 'text-[10px] text-gray-400 italic' : 'font-medium text-gray-800'}`}>
             <TeamLink team={match.home_team} fallback={match.home_source ?? '?'} />
           </span>
-          {hasResult && <span className="font-bold shrink-0 text-gray-900">{match.home_score}</span>}
+          {hasResult && <span className="font-bold shrink-0 text-gray-900">{shown.home}</span>}
         </div>
         <div className="flex items-center justify-between gap-1">
           <span className={`truncate ${isPlaceholder ? 'text-[10px] text-gray-400 italic' : 'font-medium text-gray-800'}`}>
             <TeamLink team={match.away_team} fallback={match.away_source ?? '?'} />
           </span>
-          {hasResult && <span className="font-bold shrink-0 text-gray-900">{match.away_score}</span>}
+          {hasResult && <span className="font-bold shrink-0 text-gray-900">{shown.away}</span>}
         </div>
       </div>
       <div className="pt-1.5 border-t border-gray-100">

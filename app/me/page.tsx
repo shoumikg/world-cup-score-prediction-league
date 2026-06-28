@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { fetchAllPredictions } from '@/lib/predictions'
-import { scoreOutcome, matchPoints, OUTCOME_CLASSES } from '@/lib/scoring'
+import { scoreOutcome, matchPoints, OUTCOME_CLASSES, displayScore } from '@/lib/scoring'
 import { teamFlag, teamDisplay } from '@/lib/flags'
 import { formatKickoffIST } from '@/lib/time'
 import { computeLeaderboard } from '@/lib/leaderboard'
@@ -433,7 +433,7 @@ export default async function MePage() {
                       </span>
                     </td>
                     <td className="text-center px-2 py-2.5 font-semibold text-gray-800">
-                      {sp.match.home_score}–{sp.match.away_score}
+                      {displayScore(sp.match).home}–{displayScore(sp.match).away}
                     </td>
                     <td className="text-right px-3 py-2.5 font-semibold text-gray-700">{sp.pts}</td>
                   </tr>

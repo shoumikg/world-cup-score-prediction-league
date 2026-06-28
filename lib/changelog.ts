@@ -76,8 +76,18 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     items: [
       'New Finalists bonus on the Bonus page — pick the two teams you think will reach the final.',
       'Score 25 points for each correct finalist: 50 if you nail both, 25 for one, 0 for none. Graded automatically from the final.',
-      'Pick from opposite halves of the draw — choosing your first finalist filters the second list to the teams it could actually meet in the final.',
+      'Pick any two of the Round of 32 teams — they just can’t be the same team.',
       'Picks lock at 9 PM IST the night before the first knockout match, so get them in before the Round of 32 kicks off.',
+    ],
+  },
+  {
+    id: 8,
+    date: '2026-06-28',
+    title: 'Knockouts scored at 90 minutes',
+    items: [
+      'Knockout predictions are now scored on the scoreline at the end of 90 minutes — before any extra time or penalties.',
+      'A match decided later shows its 90-minute score with an AET or PEN badge; that 90-minute score is what your pick is graded against.',
+      'Group matches are unchanged. The knockout bracket still advances the team that actually went through.',
     ],
   },
 ]

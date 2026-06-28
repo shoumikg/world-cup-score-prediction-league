@@ -1,7 +1,7 @@
 import { getAuthUser } from '@/lib/auth'
 import { createClient } from '@/lib/supabase/server'
 import { fetchAllPredictions } from '@/lib/predictions'
-import { scoreOutcome, scoreColor, stageLabel, matchPoints } from '@/lib/scoring'
+import { scoreOutcome, scoreColor, stageLabel, matchPoints, displayScore } from '@/lib/scoring'
 import { formatKickoffIST } from '@/lib/time'
 import { teamFlag } from '@/lib/flags'
 import { TeamLink } from '@/app/TeamLink'
@@ -167,7 +167,7 @@ export default async function ComparePage(props: {
                           )}
                         </td>
                         <td className="text-center px-2 py-2 font-semibold text-gray-800">
-                          {m.home_score}–{m.away_score}
+                          {displayScore(m).home}–{displayScore(m).away}
                         </td>
                         <td className="text-center px-2 py-2">
                           {pb ? (

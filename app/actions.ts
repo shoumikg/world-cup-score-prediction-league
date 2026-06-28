@@ -276,8 +276,20 @@ export async function markWhatsNewSeen(): Promise<void> {
 export async function saveResult(
   matchId: number,
   homeScore: number,
-  awayScore: number
+  awayScore: number,
+  opts: { status?: 'ft' | 'aet' | 'pen'; regHome?: number; regAway?: number } = {}
 ): Promise<{ error?: string }> {
+  const inRange = (n: number) => Number.isInteger(n) && n >= 0 && n <= 99
+  if (!Number.isInteger(matchId) || !inRange(homeScore) || !inRange(awayScore))
+    return { error: 'Enter valid scores.' }
+
+  const status = opts.status ?? 'ft'
+  if (!['ft', 'aet', 'pen'].includes(status)) return { error: 'Invalid result type.' }
+
+  const hasReg = opts.regHome !== undefined || opts.regAway !== undefined
+  if (hasReg && (!inRange(opts.regHome as number) || !inRange(opts.regAway as number)))
+    return { error: 'Enter a valid 90-minute score.' }
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: 'Not logged in.' }
@@ -290,10 +302,16 @@ export async function saveResult(
 
   if (!profile?.is_admin) return { error: 'Unauthorized.' }
 
-  const { error } = await supabase
-    .from('matches')
-    .update({ home_score: homeScore, away_score: awayScore, status: 'ft', live_minute: null })
-    .eq('id', matchId)
+  const update: Record<string, number | string | null> = {
+    home_score: homeScore, away_score: awayScore, status, live_minute: null,
+  }
+  // The 90-minute score grades knockout predictions; group matches don't pass it.
+  if (hasReg) {
+    update.reg_home_score = opts.regHome as number
+    update.reg_away_score = opts.regAway as number
+  }
+
+  const { error } = await supabase.from('matches').update(update).eq('id', matchId)
 
   if (error) return { error: error.message }
 

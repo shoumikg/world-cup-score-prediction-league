@@ -12,6 +12,10 @@ export interface Match {
   venue: string | null
   home_score: number | null
   away_score: number | null
+  // Score at 90 minutes (regulation), used to grade knockout predictions before
+  // any extra time / penalties. Equals home/away_score except for ET/pen matches.
+  reg_home_score: number | null
+  reg_away_score: number | null
   status: 'live' | 'ft' | 'aet' | 'pen' | null
   live_minute: number | null
 }
