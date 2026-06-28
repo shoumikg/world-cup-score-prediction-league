@@ -54,7 +54,7 @@ export default async function LeaderboardPage(props: {
     showBonus
       ? supabase.from('match_events').select('*')
       : Promise.resolve({ data: null, error: null }),
-    showBonus
+    showLive && showBonus
       ? supabase.from('finalist_predictions').select('*')
       : Promise.resolve({ data: null, error: null }),
   ])
@@ -79,8 +79,8 @@ export default async function LeaderboardPage(props: {
     }
   }
 
-  // Bonus grades over the displayed match set: group questions (finalised) plus
-  // finalists (two 25-pt sub-grades). Empty when bonus is turned off.
+  // Group-stage bonus is finalised, so it counts whenever bonus is on (live and
+  // settled views), derived over the displayed match set.
   const derivedGrades = showBonus
     ? computeBonusCorrectness(
         (bonusAnswers ?? []) as BonusAnswer[],
@@ -89,7 +89,9 @@ export default async function LeaderboardPage(props: {
         baseMatches
       )
     : []
-  const finalistGrades = showBonus
+  // Finalists bonus isn't resolved until the final, so it's provisional — shown
+  // only in the live views, never in Settled.
+  const finalistGrades = showLive && showBonus
     ? computeFinalistGrades((finalistPreds ?? []) as FinalistPrediction[], baseMatches)
     : []
 
@@ -296,7 +298,7 @@ export default async function LeaderboardPage(props: {
         Exact/GD/Result = 10/5/3 group · 15/8/5 knockout pts ·
         {!showLive && <> Settled — in-progress matches excluded · </>}
         {showBonusColumn
-          ? <> Bonus = auto-scored, 25 pts each: group questions{!groupComplete ? ' (provisional until group stage ends)' : ''} + finalists (50/25/0) · </>
+          ? <> Bonus = auto-scored: group questions (25 pts each){!groupComplete ? ' (provisional until group stage ends)' : ''}{showLive ? ' + finalists (50/25/0)' : ''} · </>
           : <> Bonus excluded · </>}
         Missed predictions don't count against you.
       </p>
