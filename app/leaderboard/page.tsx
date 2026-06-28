@@ -298,7 +298,7 @@ export default async function LeaderboardPage(props: {
         {!showLive
           ? <> Settled — live matches excluded · Bonus excluded · </>
           : showBonus
-            ? <> Bonus = auto-scored from live standings{!groupComplete ? ' (provisional until group stage ends)' : ''} · </>
+            ? <> Bonus = auto-scored, 25 pts each: group questions{!groupComplete ? ' (provisional until group stage ends)' : ''} + finalists (50/25/0) · </>
             : <> Bonus points excluded · </>}
         Missed predictions don't count against you.
       </p>

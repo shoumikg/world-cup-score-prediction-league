@@ -69,6 +69,17 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
       'Match detail lists how many points each player\'s pick is earning live; My Stats splits your tally into final, live, and pending and draws live matches as hollow pulsing dots on the chart.',
     ],
   },
+  {
+    id: 7,
+    date: '2026-06-28',
+    title: 'Knockout bonus: predict the finalists',
+    items: [
+      'New Finalists bonus on the Bonus page — pick the two teams you think will reach the final.',
+      'Score 25 points for each correct finalist: 50 if you nail both, 25 for one, 0 for none. Graded automatically from the final.',
+      'Pick from opposite halves of the draw — choosing your first finalist filters the second list to the teams it could actually meet in the final.',
+      'Picks lock at 9 PM IST the night before the first knockout match, so get them in before the Round of 32 kicks off.',
+    ],
+  },
 ]
 
 export const LATEST_CHANGELOG_ID = Math.max(0, ...CHANGELOG.map(e => e.id))
