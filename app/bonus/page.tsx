@@ -207,6 +207,9 @@ export default async function BonusPage() {
                 ) : (
                   <span className="text-gray-400 italic">no pick</span>
                 )}
+                {theFinalists.length < 2 && (
+                  <p className="text-xs text-gray-400 mt-2">Results lock once both semi-finals are played.</p>
+                )}
               </div>
             )}
 
