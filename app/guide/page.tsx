@@ -89,7 +89,8 @@ export default function GuidePage() {
         </p>
         <Note>
           Live scores come from an external data feed, with the admin able to enter or correct any
-          result manually as a failsafe. For predictions, only the final result matters.
+          result manually as a failsafe. Group predictions are scored on the final result; knockout
+          predictions are scored on the 90-minute result (see <strong>Knockout matches</strong> below).
         </Note>
       </Section>
 
@@ -116,6 +117,12 @@ export default function GuidePage() {
         <p className="mt-2">
           You can predict a knockout match as soon as the teams are filled in, up until its kickoff.
         </p>
+        <Note>
+          Knockout predictions are scored on the scoreline at the <strong>end of 90 minutes</strong> —
+          before any extra time or penalties. A match decided later shows its 90-minute score with an
+          <strong> AET</strong> or <strong>PEN</strong> badge, and that 90-minute score is what your
+          prediction is graded against.
+        </Note>
       </Section>
 
       <Section title="Times and dates">

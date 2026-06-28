@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { savePrediction } from '@/app/actions'
-import { stageLabel, scoreColor } from '@/lib/scoring'
+import { stageLabel, scoreColor, displayScore } from '@/lib/scoring'
 import { teamDisplay } from '@/lib/flags'
 import { kickoffTimerDelay, predictionDeadlineUTC } from '@/lib/time'
 import type { Match, Prediction, PickEntry } from '@/lib/types'
@@ -69,6 +69,9 @@ export function MatchRow({ match, prediction, isLocked, picks }: Props) {
   }
 
   const hasResult = match.home_score !== null
+  // Knockouts display the 90-minute score they're graded on; the AET/PEN badge
+  // signals it was decided later. Live and group matches show the actual score.
+  const shown = displayScore(match)
 
   // True when the current ticker values match what's stored in the DB
   const isRecorded =
@@ -99,14 +102,14 @@ export function MatchRow({ match, prediction, isLocked, picks }: Props) {
       <span className="text-[10px] font-semibold">
         {match.live_minute != null ? `${match.live_minute}'` : 'LIVE'}
       </span>
-      <span className="text-sm font-bold">{match.home_score}–{match.away_score}</span>
+      <span className="text-sm font-bold">{shown.home}–{shown.away}</span>
     </span>
   ) : (
     <span className="inline-flex items-center gap-1.5 bg-gray-800 text-white rounded px-2 py-0.5 shrink-0">
       <span className="text-[10px] font-medium text-gray-400">
         {match.status === 'aet' ? 'AET' : match.status === 'pen' ? 'PEN' : 'FT'}
       </span>
-      <span className="text-sm font-bold">{match.home_score}–{match.away_score}</span>
+      <span className="text-sm font-bold">{shown.home}–{shown.away}</span>
     </span>
   )
 

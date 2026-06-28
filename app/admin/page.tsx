@@ -87,6 +87,11 @@ export default async function AdminPage() {
                     {' '}vs{' '}
                     <TeamLink team={m.away_team} fallback={m.away_source ?? ''} />
                   </span>
+                  {(m.status === 'aet' || m.status === 'pen') && m.reg_home_score === null && (
+                    <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5">
+                      90′ score needed
+                    </span>
+                  )}
                   <span className="text-xs text-gray-400 ml-auto">{formatKickoffIST(m.kickoff_utc)} IST</span>
                 </div>
                 <AdminResultForm match={m} />

@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { formatKickoffIST, isDeadlinePassed, predictionDeadlineUTC } from '@/lib/time'
 import { teamDisplay, teamFlag } from '@/lib/flags'
 import { TeamLink } from '@/app/TeamLink'
-import { scoreColor, scoreOutcome, matchPoints, stageLabel, OUTCOME_CLASSES } from '@/lib/scoring'
+import { scoreColor, scoreOutcome, matchPoints, stageLabel, OUTCOME_CLASSES, displayScore } from '@/lib/scoring'
 import { DeadlineCountdown } from '@/app/DeadlineCountdown'
 import { LiveRefresh } from '@/app/LiveRefresh'
 import type { Match, Prediction, PickEntry, MatchEvent } from '@/lib/types'
@@ -118,18 +118,22 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
   const draws    = picksList.filter(p => p.prediction && p.prediction.homePred === p.prediction.awayPred).length
   const awayWins = picksList.filter(p => p.prediction && p.prediction.homePred < p.prediction.awayPred).length
 
+  const shown = displayScore(match)
+  // Knockout decided beyond 90' — the displayed score is the 90' score predictions are graded on.
+  const decidedLate = match.status === 'aet' || match.status === 'pen'
+
   const scoreChip = !hasResult ? null : match.status === 'live' ? (
     <span className="inline-flex items-center gap-1.5 bg-green-600 text-white rounded px-2.5 py-1">
       <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />
       <span className="text-xs font-semibold">{match.live_minute != null ? `${match.live_minute}'` : 'LIVE'}</span>
-      <span className="text-xl font-bold">{match.home_score}–{match.away_score}</span>
+      <span className="text-xl font-bold">{shown.home}–{shown.away}</span>
     </span>
   ) : (
     <span className="inline-flex items-center gap-1.5 bg-gray-800 text-white rounded px-2.5 py-1">
       <span className="text-xs font-medium text-gray-400">
         {match.status === 'aet' ? 'AET' : match.status === 'pen' ? 'PEN' : 'FT'}
       </span>
-      <span className="text-xl font-bold">{match.home_score}–{match.away_score}</span>
+      <span className="text-xl font-bold">{shown.home}–{shown.away}</span>
     </span>
   )
 
@@ -189,6 +193,12 @@ export default async function MatchPage(props: { params: Promise<{ id: string }>
             </>
           )}
         </div>
+        {decidedLate && (
+          <p className="text-xs text-gray-400 mt-2">
+            Decided {match.status === 'pen' ? 'on penalties' : 'in extra time'} — predictions are scored on the
+            90-minute result shown above.
+          </p>
+        )}
       </div>
 
       {/* Goal scorers — shown as soon as events exist */}

@@ -18,6 +18,8 @@ function match(
     home_team: 'Home', away_team: 'Away',
     home_source: null, away_source: null,
     venue: null, home_score: homeScore, away_score: awayScore,
+    // Regulation-decided matches: the 90-minute score equals the full score.
+    reg_home_score: homeScore, reg_away_score: awayScore,
   }
 }
 

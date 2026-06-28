@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { stageLabel, scoreColor, matchPoints, MATCH_POINTS } from '../lib/scoring'
+import { stageLabel, scoreColor, matchPoints, MATCH_POINTS, scoreOutcome, scoringScore, displayScore } from '../lib/scoring'
 import type { Match, Prediction, Stage } from '../lib/types'
 
 // ── Fixtures ─────────────────────────────────────────────────
@@ -118,5 +118,73 @@ describe('scoreColor', () => {
     it('awards red when predicted home win but actual draw', () => {
       expect(scoreColor(pred(2, 0), match(1, 1))).toContain('red')
     })
+  })
+})
+
+// ── 90-minute (regulation) scoring for knockouts ──────────────
+function ko(opts: {
+  stage?: Stage
+  home?: number | null; away?: number | null
+  regHome?: number | null; regAway?: number | null
+  status?: Match['status']; minute?: number | null
+}): Match {
+  return {
+    id: 2, stage: opts.stage ?? 'r16', group_name: null,
+    kickoff_utc: '2026-07-04T17:00:00Z', home_team: 'H', away_team: 'A',
+    home_source: null, away_source: null, venue: null,
+    home_score: opts.home ?? null, away_score: opts.away ?? null,
+    reg_home_score: opts.regHome ?? null, reg_away_score: opts.regAway ?? null,
+    status: opts.status ?? null, live_minute: opts.minute ?? null,
+  }
+}
+
+describe('knockout grading on the 90-minute score', () => {
+  it('grades on the regulation score, not the extra-time result', () => {
+    // 1–1 at 90', 3–1 after extra time.
+    const m = ko({ home: 3, away: 1, regHome: 1, regAway: 1, status: 'aet' })
+    expect(scoreOutcome(pred(1, 1), m)).toBe('exact')   // matched the 90' score
+    expect(scoreOutcome(pred(3, 1), m)).toBe('wrong')   // matched ET, not 90' (a draw)
+  })
+
+  it('grades a penalty match on the level 90-minute score', () => {
+    const m = ko({ home: 0, away: 0, regHome: 0, regAway: 0, status: 'pen' })
+    expect(scoreOutcome(pred(0, 0), m)).toBe('exact')
+  })
+
+  it('is unscored until the 90-minute score is recorded (finished in ET)', () => {
+    const m = ko({ home: 2, away: 1, regHome: null, regAway: null, status: 'aet' })
+    expect(scoringScore(m)).toBeNull()
+    expect(scoreOutcome(pred(2, 1), m)).toBeNull()
+  })
+
+  it('uses the running score for live provisional points during regular time', () => {
+    const m = ko({ home: 1, away: 0, status: 'live', minute: 70 })
+    expect(scoreOutcome(pred(1, 0), m)).toBe('exact')
+  })
+
+  it('stops trusting the running score once in extra time (minute > 90)', () => {
+    const m = ko({ home: 2, away: 1, status: 'live', minute: 105 })
+    expect(scoringScore(m)).toBeNull()
+  })
+
+  it('a regulation knockout grades on its (equal) regulation and full score', () => {
+    const m = ko({ home: 2, away: 1, regHome: 2, regAway: 1, status: 'ft' })
+    expect(scoreOutcome(pred(2, 1), m)).toBe('exact')
+  })
+})
+
+describe('displayScore', () => {
+  it('shows the 90-minute score for a settled extra-time knockout', () => {
+    const m = ko({ home: 3, away: 1, regHome: 1, regAway: 1, status: 'aet' })
+    expect(displayScore(m)).toEqual({ home: 1, away: 1 })
+  })
+
+  it('shows the running score for a live knockout', () => {
+    const m = ko({ home: 2, away: 2, regHome: null, regAway: null, status: 'live', minute: 100 })
+    expect(displayScore(m)).toEqual({ home: 2, away: 2 })
+  })
+
+  it('shows the actual score for a group match', () => {
+    expect(displayScore(match(3, 2))).toEqual({ home: 3, away: 2 })
   })
 })

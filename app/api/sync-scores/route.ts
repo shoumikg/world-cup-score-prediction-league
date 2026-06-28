@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   // ── 2. Load match list (own DB — no API quota used) ────────────────────────
   const { data: matchesRaw, error: matchErr } = await db
     .from('matches')
-    .select('id, kickoff_utc, home_team, away_team')
+    .select('id, kickoff_utc, home_team, away_team, stage')
 
   if (matchErr) return NextResponse.json({ error: matchErr.message }, { status: 500 })
 
@@ -39,7 +39,9 @@ export async function GET(req: NextRequest) {
     kickoff_utc: string
     home_team: string | null
     away_team: string | null
+    stage: string
   }[]
+  const stageById = new Map(matches.map(m => [m.id, m.stage]))
 
   // ── 3. Skip if nothing is in its live window right now ─────────────────────
   const anyLive = matches.some(m => inLiveWindow(m.kickoff_utc))
@@ -94,6 +96,8 @@ export async function GET(req: NextRequest) {
     away_score: number
     status: 'live' | 'ft' | 'aet' | 'pen' | null
     live_minute: number | null
+    reg_home_score?: number
+    reg_away_score?: number
   }[] = []
   const unmatched: string[] = []
 
@@ -107,13 +111,33 @@ export async function GET(req: NextRequest) {
 
     if (matchId !== undefined) {
       const status = mapStatus(f.status, f.score.duration)
+      // Record the regulation (90') score for knockout grading ONLY when the
+      // match finished in normal time — then fullTime IS the 90' score. For
+      // extra-time / penalty matches the provider's fullTime includes ET, so we
+      // never use it here; the admin enters the 90' score instead.
+      const regulationKnockout =
+        f.status === 'FINISHED' &&
+        f.score.duration === 'REGULAR' &&
+        (stageById.get(matchId) ?? 'group') !== 'group'
+      // Once a match is in extra time / penalties the running score includes ET
+      // goals and must not grade predictions. The provider's ET minute is
+      // unreliable (it can reset or be omitted), so derive "past 90'" from the
+      // status itself and pin live_minute above 90 — scoringScore then holds off
+      // grading the knockout until the admin records the 90-minute score.
+      const beyondRegulation = f.status === 'EXTRA_TIME' || f.status === 'PENALTY_SHOOTOUT'
+      const liveMinute =
+        status !== 'live' ? null
+          : beyondRegulation ? Math.max(91, typeof f.minute === 'number' ? f.minute : 91)
+          : (typeof f.minute === 'number' ? f.minute : null)
       updates.push({
         id: matchId,
         home_score: f.score.fullTime.home!,
         away_score: f.score.fullTime.away!,
         status,
-        // Minute is only meaningful in play; cleared at FT or when the feed omits it
-        live_minute: status === 'live' && typeof f.minute === 'number' ? f.minute : null,
+        live_minute: liveMinute,
+        ...(regulationKnockout
+          ? { reg_home_score: f.score.fullTime.home!, reg_away_score: f.score.fullTime.away! }
+          : {}),
       })
     } else {
       // Appears in Vercel function logs and response body for diagnosis.
@@ -125,10 +149,15 @@ export async function GET(req: NextRequest) {
   // ── 8. Write score + status updates ───────────────────────────────────────
   const errors: string[] = []
   for (const u of updates) {
-    const { error } = await db
-      .from('matches')
-      .update({ home_score: u.home_score, away_score: u.away_score, status: u.status, live_minute: u.live_minute })
-      .eq('id', u.id)
+    const patch: Record<string, number | string | null> = {
+      home_score: u.home_score, away_score: u.away_score, status: u.status, live_minute: u.live_minute,
+    }
+    // Only set reg_* when known — never overwrite an admin-entered 90' score with null.
+    if (u.reg_home_score !== undefined) {
+      patch.reg_home_score = u.reg_home_score
+      patch.reg_away_score = u.reg_away_score!
+    }
+    const { error } = await db.from('matches').update(patch).eq('id', u.id)
     if (error) errors.push(`match ${u.id}: ${error.message}`)
   }
 
