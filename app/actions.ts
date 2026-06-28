@@ -9,7 +9,9 @@ import { predictionDeadlineUTC } from '@/lib/time'
 import { validateBonusAnswer } from '@/lib/bonus'
 import { validateMatchEvent } from '@/lib/matchEvent'
 import { propagateKnockouts } from '@/lib/knockout'
+import { validateFinalistPrediction } from '@/lib/finalist'
 import { LATEST_CHANGELOG_ID } from '@/lib/changelog'
+import type { Match } from '@/lib/types'
 
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/
 
@@ -205,6 +207,52 @@ export async function saveBonusAnswer(
   }
 
   revalidatePath('/bonus')
+  return {}
+}
+
+// ── Finalists bonus ───────────────────────────────────────────
+
+export async function saveFinalistPrediction(
+  rawTeamA: string,
+  rawTeamB: string
+): Promise<{ error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+
+  // Load knockout matches for both the deadline and bracket validation.
+  const { data: matchesRaw } = await supabase.from('matches').select('*')
+  const matches = (matchesRaw ?? []) as Match[]
+
+  const firstKnockout = matches
+    .filter(m => m.stage !== 'group')
+    .map(m => m.kickoff_utc)
+    .sort()[0]
+  if (!firstKnockout) return { error: 'No knockout matches found.' }
+  if (predictionDeadlineUTC(firstKnockout) <= new Date())
+    return { error: 'Finalist picks are locked — the deadline has passed.' }
+
+  const result = validateFinalistPrediction(rawTeamA, rawTeamB, matches)
+  if ('error' in result) return { error: result.error }
+
+  const { error } = await supabase.from('finalist_predictions').upsert(
+    {
+      user_id: user.id,
+      team_a: result.teamA,
+      team_b: result.teamB,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id' }
+  )
+
+  if (error) {
+    if (error.code === '42501')
+      return { error: 'Finalist picks are locked — the deadline has passed.' }
+    return { error: 'Failed to save finalist picks. Please try again.' }
+  }
+
+  revalidatePath('/bonus')
+  revalidatePath('/leaderboard')
   return {}
 }
 

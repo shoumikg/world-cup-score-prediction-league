@@ -143,11 +143,15 @@ describe('GROUP_BONUS_QUESTIONS', () => {
 
 // ── bonusPointsFor ────────────────────────────────────────────
 describe('bonusPointsFor', () => {
-  it.each([1, 2, 3])('question %d returns 25', id => {
+  it.each([1, 2, 3])('group question %d returns 25', id => {
     expect(bonusPointsFor(id)).toBe(25)
   })
 
-  it.each([0, 4, 99, -1])('unknown id %d returns 0', id => {
+  it.each([4, 5])('finalist question %d returns 25', id => {
+    expect(bonusPointsFor(id)).toBe(25)
+  })
+
+  it.each([0, 6, 99, -1])('unknown id %d returns 0', id => {
     expect(bonusPointsFor(id)).toBe(0)
   })
 

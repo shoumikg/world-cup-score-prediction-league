@@ -8,10 +8,11 @@ import { teamFlag, teamDisplay } from '@/lib/flags'
 import { formatKickoffIST } from '@/lib/time'
 import { computeLeaderboard } from '@/lib/leaderboard'
 import { computeBonusCorrectness } from '@/lib/bonusTracker'
+import { computeFinalistGrades } from '@/lib/finalist'
 import { GROUP_BONUS_QUESTIONS } from '@/lib/bonus'
 import { TeamLink } from '@/app/TeamLink'
 import { LiveRefresh } from '@/app/LiveRefresh'
-import type { Match, Prediction, BonusGrade, BonusAnswer, MatchEvent } from '@/lib/types'
+import type { Match, Prediction, BonusGrade, BonusAnswer, MatchEvent, FinalistPrediction } from '@/lib/types'
 import type { Outcome } from '@/lib/scoring'
 
 export const dynamic = 'force-dynamic'
@@ -44,6 +45,7 @@ export default async function MePage() {
     { data: allBonusAnswersRaw },
     { data: allGradesRaw },
     { data: allProfilesRaw },
+    { data: finalistPredsRaw },
   ] = await Promise.all([
     supabase.from('profiles').select('id, display_name, favorite_team, is_admin').eq('id', user.id).single(),
     supabase.from('matches').select('*').order('kickoff_utc'),
@@ -54,6 +56,7 @@ export default async function MePage() {
     supabase.from('bonus_answers').select('*'),
     supabase.from('bonus_grades').select('user_id, question_id, confirmed_answer'),
     supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
+    supabase.from('finalist_predictions').select('*'),
   ])
 
   type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
@@ -76,9 +79,10 @@ export default async function MePage() {
   }
 
   const allDerivedGrades = computeBonusCorrectness(allBonusAns, confirmedQ1, events, allMatches)
+  const finalistGrades = computeFinalistGrades((finalistPredsRaw ?? []) as FinalistPrediction[], allMatches)
 
   const playerProfiles = allProfiles.filter(p => !p.is_admin)
-  const leaderboard = computeLeaderboard(playerProfiles, allPreds, allMatches, allDerivedGrades)
+  const leaderboard = computeLeaderboard(playerProfiles, allPreds, allMatches, [...allDerivedGrades, ...finalistGrades])
   const myRow = leaderboard.find(r => r.userId === user.id)
 
   // While a match is live my total/rank above already fold in the in-progress
@@ -91,7 +95,7 @@ export default async function MePage() {
     const liveMatchIds = new Set(allMatches.filter(m => m.status === 'live').map(m => m.id))
     const finishedEvents = events.filter(e => !liveMatchIds.has(e.match_id))
     const baseDerivedGrades = computeBonusCorrectness(allBonusAns, confirmedQ1, finishedEvents, finishedMatches)
-    const baseLb = computeLeaderboard(playerProfiles, allPreds, finishedMatches, baseDerivedGrades)
+    const baseLb = computeLeaderboard(playerProfiles, allPreds, finishedMatches, [...baseDerivedGrades, ...finalistGrades])
     const myBase = baseLb.find(r => r.userId === user.id)
     if (myBase) myMovement = myBase.rank - myRow.rank
   }

@@ -4,10 +4,11 @@ import { createClient } from '@/lib/supabase/server'
 import { fetchAllPredictions } from '@/lib/predictions'
 import { computeLeaderboard } from '@/lib/leaderboard'
 import { computeBonusCorrectness, isGroupStageComplete } from '@/lib/bonusTracker'
+import { computeFinalistGrades } from '@/lib/finalist'
 import { teamFlag } from '@/lib/flags'
 import { OUTCOME_CLASSES, scoreOutcome, matchPoints } from '@/lib/scoring'
 import { LiveRefresh } from '@/app/LiveRefresh'
-import type { Match, Prediction, BonusGrade, BonusAnswer, MatchEvent } from '@/lib/types'
+import type { Match, Prediction, BonusGrade, BonusAnswer, MatchEvent, FinalistPrediction } from '@/lib/types'
 import type { LeaderboardProfile } from '@/lib/leaderboard'
 
 export const dynamic = 'force-dynamic'
@@ -39,6 +40,7 @@ export default async function LeaderboardPage(props: {
     { data: grades },
     { data: bonusAnswers },
     { data: events },
+    { data: finalistPreds },
   ] = await Promise.all([
     supabase.from('profiles').select('id, display_name, favorite_team, is_admin'),
     supabase.from('matches').select('*'),  // all matches (group-complete check needs unscored too)
@@ -49,6 +51,9 @@ export default async function LeaderboardPage(props: {
       : Promise.resolve({ data: null, error: null }),
     showLive
       ? supabase.from('match_events').select('*')
+      : Promise.resolve({ data: null, error: null }),
+    showLive
+      ? supabase.from('finalist_predictions').select('*')
       : Promise.resolve({ data: null, error: null }),
   ])
 
@@ -73,6 +78,12 @@ export default async function LeaderboardPage(props: {
   const allMatches = (matches ?? []) as Match[]
   const groupComplete = isGroupStageComplete(allMatches)
 
+  // Finalists bonus → two 25-pt sub-grades per user; constant across the live
+  // baseline (depends on the final's teams, not in-progress scores).
+  const finalistGrades = showLive
+    ? computeFinalistGrades((finalistPreds ?? []) as FinalistPrediction[], allMatches)
+    : []
+
   type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
   const playerProfiles = ((profiles ?? []) as ProfileRow[]).filter(p => !p.is_admin)
 
@@ -87,7 +98,7 @@ export default async function LeaderboardPage(props: {
     playerProfiles,
     (preds ?? []) as Prediction[],
     baseMatches,
-    showBonusColumn ? derivedGrades : []
+    showBonusColumn ? [...derivedGrades, ...finalistGrades] : []
   )
 
   // While a match is in progress the standings above already fold in live
@@ -115,7 +126,7 @@ export default async function LeaderboardPage(props: {
       playerProfiles,
       (preds ?? []) as Prediction[],
       finishedMatches,
-      showBonus ? baseDerivedGrades : []
+      showBonus ? [...baseDerivedGrades, ...finalistGrades] : []
     )
     const baseline = new Map(baselineRows.map(r => [r.userId, r]))
     // Points in play = each player's match points from predictions on the games
@@ -287,7 +298,7 @@ export default async function LeaderboardPage(props: {
         {!showLive
           ? <> Settled — live matches excluded · Bonus excluded · </>
           : showBonus
-            ? <> Bonus = auto-scored from live standings{!groupComplete ? ' (provisional until group stage ends)' : ''} · </>
+            ? <> Bonus = auto-scored, 25 pts each: group questions{!groupComplete ? ' (provisional until group stage ends)' : ''} + finalists (50/25/0) · </>
             : <> Bonus points excluded · </>}
         Missed predictions don't count against you.
       </p>

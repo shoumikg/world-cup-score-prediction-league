@@ -63,6 +63,13 @@ export interface BonusGrade {
   graded_at: string
 }
 
+export interface FinalistPrediction {
+  user_id: string
+  team_a: string
+  team_b: string
+  updated_at: string
+}
+
 export interface MatchEvent {
   id: number
   match_id: number
