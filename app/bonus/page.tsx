@@ -182,8 +182,8 @@ export default async function BonusPage() {
 
           <div className="bg-white rounded-xl border shadow-sm p-4">
             <p className="text-sm text-gray-600 mb-3">
-              Predict the two teams that will reach the final. They must be from opposite halves of
-              the draw — picking one filters the other list to the teams it could meet in the final.
+              Predict the two teams that will reach the final. Pick any two of the Round of 32 teams —
+              they just can’t be the same team.
             </p>
 
             {!koDeadlinePassed ? (

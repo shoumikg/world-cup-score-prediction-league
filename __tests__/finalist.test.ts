@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest'
-import { bracketHalves } from '../lib/knockout'
 import {
   finalistOptions,
   validateFinalistPrediction,
@@ -10,7 +9,7 @@ import { bonusPointsFor } from '../lib/bonus'
 import type { Match, Stage, FinalistPrediction } from '../lib/types'
 
 // Minimal but structurally faithful bracket: 4 R32 matches → 2 R16 → 2 QF →
-// 2 SF → final. Half A feeds SF M101, half B feeds SF M102.
+// 2 SF → final. M73/M74 feed SF M101; M75/M76 feed SF M102.
 function km(id: number, stage: Stage, homeSrc: string, awaySrc: string, home?: string, away?: string): Match {
   return {
     id, stage, group_name: null, kickoff_utc: '2026-06-28T17:00:00Z',
@@ -42,39 +41,32 @@ function bracket(): Match[] {
   ]
 }
 
-describe('bracketHalves', () => {
-  it('assigns each R32 team to the half of the draw feeding its semi-final', () => {
-    const halves = bracketHalves(bracket())
-    expect(halves.get('Alpha')).toBe('A')
-    expect(halves.get('Delta')).toBe('A')
-    expect(halves.get('Echo')).toBe('B')
-    expect(halves.get('Hotel')).toBe('B')
+describe('finalistOptions', () => {
+  it('lists the round-of-32 teams, name-sorted, with no duplicates', () => {
+    const opts = finalistOptions(bracket())
+    expect(opts).toContain('Alpha')
+    expect(opts).toContain('Echo')
+    expect(opts).toEqual([...opts].sort())          // sorted
+    expect(opts.length).toBe(new Set(opts).size)    // unique
+    // Only R32 participants — later-round placeholder slots aren't included.
+    expect(opts).toEqual(['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Foxtrot', 'Golf', 'Hotel'])
   })
 
   it('omits teams not yet placed in the bracket', () => {
     const matches = bracket().map(m => m.id === 75 ? km(75, 'r32', 'Winner E', 'Runner-up F') : m)
-    const halves = bracketHalves(matches)
-    expect(halves.has('Echo')).toBe(false)
-    expect(halves.get('Alpha')).toBe('A')
-  })
-})
-
-describe('finalistOptions', () => {
-  it('lists placed teams with their half, name-sorted', () => {
-    const opts = finalistOptions(bracket())
-    expect(opts).toContainEqual({ team: 'Alpha', half: 'A' })
-    expect(opts).toContainEqual({ team: 'Echo', half: 'B' })
-    expect(opts.map(o => o.team)).toEqual([...opts.map(o => o.team)].sort())
+    const opts = finalistOptions(matches)
+    expect(opts).not.toContain('Echo')
+    expect(opts).toContain('Alpha')
   })
 })
 
 describe('validateFinalistPrediction', () => {
-  it('accepts two teams from opposite halves', () => {
+  it('accepts any two distinct round-of-32 teams', () => {
     expect(validateFinalistPrediction('Alpha', 'Echo', bracket())).toEqual({ teamA: 'Alpha', teamB: 'Echo' })
   })
-  it('rejects two teams from the same half', () => {
-    const r = validateFinalistPrediction('Alpha', 'Delta', bracket())
-    expect('error' in r && r.error).toMatch(/same half/i)
+  it('accepts two teams that would meet before the final (no half restriction)', () => {
+    // Alpha and Delta both feed SF M101 — previously rejected, now allowed.
+    expect(validateFinalistPrediction('Alpha', 'Delta', bracket())).toEqual({ teamA: 'Alpha', teamB: 'Delta' })
   })
   it('rejects the same team twice', () => {
     const r = validateFinalistPrediction('Alpha', 'Alpha', bracket())
