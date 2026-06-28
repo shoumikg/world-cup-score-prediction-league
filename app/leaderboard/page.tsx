@@ -20,12 +20,14 @@ export default async function LeaderboardPage(props: {
   // Three view modes (view-only — no data changes):
   //   default        → live scores + bonus
   //   ?bonus=off     → live scores, match points only
-  //   ?live=off      → settled (finished matches only, no bonus)
+  //   ?live=off      → settled (finished matches only, bonus still counts)
   const showBonus = bonusParam !== 'off'
   const showLive = liveParam !== 'off'
-  // Single source of truth for the bonus column: only shown when both flags are on.
-  // Controls th, td, and computeLeaderboard arg — must stay in sync.
-  const showBonusColumn = showBonus && showLive
+  // Single source of truth for the bonus column. Group-stage bonus and finalists
+  // are finalised, so they count in the settled view too — bonus shows whenever
+  // it isn't explicitly turned off. Controls th, td, and the computeLeaderboard
+  // arg, which must stay in sync.
+  const showBonusColumn = showBonus
 
   const user = await getAuthUser()
   if (!user) return null // middleware will redirect
@@ -46,53 +48,50 @@ export default async function LeaderboardPage(props: {
     supabase.from('matches').select('*'),  // all matches (group-complete check needs unscored too)
     fetchAllPredictions(supabase),
     supabase.from('bonus_grades').select('user_id, question_id, confirmed_answer'),
-    showLive
+    showBonus
       ? supabase.from('bonus_answers').select('*')
       : Promise.resolve({ data: null, error: null }),
-    showLive
+    showBonus
       ? supabase.from('match_events').select('*')
       : Promise.resolve({ data: null, error: null }),
-    showLive
+    showBonus
       ? supabase.from('finalist_predictions').select('*')
       : Promise.resolve({ data: null, error: null }),
   ])
 
-  // Build confirmed Q1 map: user_id → canonical player name.
-  // Only needed when live data is shown (bonus uses it).
+  const allMatches = (matches ?? []) as Match[]
+  const groupComplete = isGroupStageComplete(allMatches)
+  const finishedMatches = allMatches.filter(m => m.status !== 'live')
+
+  // Settled mode shows finished matches only; the live views include in-progress
+  // ones. Bonus is derived over the SAME match set so it matches the displayed
+  // standings — the group-stage bonus is finalised, so it counts in settled too.
+  const baseMatches = showLive ? allMatches : finishedMatches
+
+  type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
+  const playerProfiles = ((profiles ?? []) as ProfileRow[]).filter(p => !p.is_admin)
+
+  // Confirmed Q1 player names (admin-canonicalised) — needed to grade Q1.
   const confirmedQ1 = new Map<string, string>()
-  if (showLive) {
+  if (showBonus) {
     for (const g of (grades ?? []) as Pick<BonusGrade, 'user_id' | 'question_id' | 'confirmed_answer'>[]) {
       if (g.question_id === 1 && g.confirmed_answer) confirmedQ1.set(g.user_id, g.confirmed_answer)
     }
   }
 
-  const derivedGrades = showLive
+  // Bonus grades over the displayed match set: group questions (finalised) plus
+  // finalists (two 25-pt sub-grades). Empty when bonus is turned off.
+  const derivedGrades = showBonus
     ? computeBonusCorrectness(
         (bonusAnswers ?? []) as BonusAnswer[],
         confirmedQ1,
         (events ?? []) as MatchEvent[],
-        (matches ?? []) as Match[]
+        baseMatches
       )
     : []
-
-  const allMatches = (matches ?? []) as Match[]
-  const groupComplete = isGroupStageComplete(allMatches)
-
-  // Finalists bonus → two 25-pt sub-grades per user; constant across the live
-  // baseline (depends on the final's teams, not in-progress scores).
-  const finalistGrades = showLive
-    ? computeFinalistGrades((finalistPreds ?? []) as FinalistPrediction[], allMatches)
+  const finalistGrades = showBonus
+    ? computeFinalistGrades((finalistPreds ?? []) as FinalistPrediction[], baseMatches)
     : []
-
-  type ProfileRow = { id: string; display_name: string; favorite_team: string | null; is_admin: boolean | null }
-  const playerProfiles = ((profiles ?? []) as ProfileRow[]).filter(p => !p.is_admin)
-
-  // Hoisted once — used both by baseMatches (settled mode) and the liveInfo baseline.
-  const finishedMatches = allMatches.filter(m => m.status !== 'live')
-
-  // Settled mode: exclude in-progress matches entirely; bonus always off (bonus
-  // derives from live event data, so it can't be consistent without live scores).
-  const baseMatches = showLive ? allMatches : finishedMatches
 
   const rows = computeLeaderboard(
     playerProfiles,
@@ -295,11 +294,10 @@ export default async function LeaderboardPage(props: {
 
       <p className="text-xs text-gray-400 mt-3">
         Exact/GD/Result = 10/5/3 group · 15/8/5 knockout pts ·
-        {!showLive
-          ? <> Settled — live matches excluded · Bonus excluded · </>
-          : showBonus
-            ? <> Bonus = auto-scored, 25 pts each: group questions{!groupComplete ? ' (provisional until group stage ends)' : ''} + finalists (50/25/0) · </>
-            : <> Bonus points excluded · </>}
+        {!showLive && <> Settled — in-progress matches excluded · </>}
+        {showBonusColumn
+          ? <> Bonus = auto-scored, 25 pts each: group questions{!groupComplete ? ' (provisional until group stage ends)' : ''} + finalists (50/25/0) · </>
+          : <> Bonus excluded · </>}
         Missed predictions don't count against you.
       </p>
     </div>
