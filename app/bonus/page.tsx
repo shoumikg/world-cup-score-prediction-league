@@ -3,9 +3,12 @@ import { createClient } from '@/lib/supabase/server'
 import { predictionDeadlineUTC, formatKickoffIST } from '@/lib/time'
 import { GROUP_BONUS_QUESTIONS } from '@/lib/bonus'
 import { q1Leaders, q2Leaders, q3Leaders, isGroupStageComplete, groupTopScorers } from '@/lib/bonusTracker'
+import { finalistOptions, finalists } from '@/lib/finalist'
+import { teamFlag } from '@/lib/flags'
 import { BonusQuestionCard } from '@/app/BonusQuestionCard'
+import { FinalistPredictionForm } from '@/app/FinalistPredictionForm'
 import { DeadlineCountdown } from '@/app/DeadlineCountdown'
-import type { BonusAnswer, BonusGrade, BonusPickEntry, MatchEvent } from '@/lib/types'
+import type { BonusAnswer, BonusGrade, BonusPickEntry, MatchEvent, Match, FinalistPrediction } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +24,7 @@ export default async function BonusPage() {
     { data: grades },
     { data: events },
     { data: allMatches },
+    { data: finalistPreds },
   ] = await Promise.all([
     supabase.from('matches').select('kickoff_utc').eq('stage', 'group').order('kickoff_utc').limit(1),
     supabase.from('bonus_answers').select('*'),
@@ -28,6 +32,7 @@ export default async function BonusPage() {
     supabase.from('bonus_grades').select('user_id, question_id, confirmed_answer'),
     supabase.from('match_events').select('*'),
     supabase.from('matches').select('*'),
+    supabase.from('finalist_predictions').select('*'),
   ])
 
   const firstKickoff = (firstGroupMatches as { kickoff_utc: string }[] | null)?.[0]?.kickoff_utc
@@ -82,6 +87,41 @@ export default async function BonusPage() {
 
   const deadlineISO = deadline.toISOString()
 
+  // ── Finalists bonus ──────────────────────────────────────────
+  const fullMatches = (allMatches ?? []) as Match[]
+  const firstKnockoutKick = fullMatches
+    .filter(m => m.stage !== 'group')
+    .map(m => m.kickoff_utc)
+    .sort()[0]
+  const koDeadline = firstKnockoutKick ? predictionDeadlineUTC(firstKnockoutKick) : null
+  const koDeadlinePassed = koDeadline ? koDeadline <= new Date() : false
+  const koOptions = finalistOptions(fullMatches)
+  const theFinalists = finalists(fullMatches) // [] until both finalists known
+  const finalistList = (finalistPreds ?? []) as FinalistPrediction[]
+  const ownFinalist = finalistList.find(f => f.user_id === user.id) ?? null
+  const profileById = new Map(profileList.map(p => [p.id, p]))
+  // Others' picks revealed only after the deadline (and only non-admins).
+  const othersFinalists = koDeadlinePassed
+    ? finalistList
+        .filter(f => f.user_id !== user.id && profileById.has(f.user_id))
+        .map(f => ({ profile: profileById.get(f.user_id)!, pick: f }))
+        .sort((a, b) => a.profile.display_name.localeCompare(b.profile.display_name))
+    : []
+
+  const finalistChip = (team: string) => {
+    const decided = theFinalists.length === 2
+    const cls = !decided
+      ? 'bg-gray-100 text-gray-700'
+      : theFinalists.includes(team)
+        ? 'bg-green-100 text-green-700'
+        : 'bg-red-100 text-red-600'
+    return (
+      <span className={`text-xs font-medium px-2 py-0.5 rounded ${cls}`}>
+        {teamFlag(team) && <span className="mr-1">{teamFlag(team)}</span>}{team}
+      </span>
+    )
+  }
+
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-6">
@@ -125,6 +165,75 @@ export default async function BonusPage() {
           )
         })}
       </div>
+
+      {/* Knockout finalists bonus */}
+      {koDeadline && (
+        <section className="mb-8">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-3">
+            <div>
+              <h2 className="text-lg font-bold">Finalists</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Knockout stage · 25 pts per correct finalist (50 / 25 / 0)</p>
+            </div>
+            <span className={`text-xs font-normal ${koDeadlinePassed ? 'text-red-400' : 'text-gray-400'}`}>
+              Deadline {formatKickoffIST(koDeadline.toISOString())} IST
+              {koDeadlinePassed ? ' · closed' : <DeadlineCountdown deadlineISO={koDeadline.toISOString()} />}
+            </span>
+          </div>
+
+          <div className="bg-white rounded-xl border shadow-sm p-4">
+            <p className="text-sm text-gray-600 mb-3">
+              Predict the two teams that will reach the final. They must be from opposite halves of
+              the draw — picking one filters the other list to the teams it could meet in the final.
+            </p>
+
+            {!koDeadlinePassed ? (
+              koOptions.length > 0 ? (
+                <FinalistPredictionForm
+                  options={koOptions}
+                  initialA={ownFinalist?.team_a ?? ''}
+                  initialB={ownFinalist?.team_b ?? ''}
+                />
+              ) : (
+                <p className="text-sm text-gray-400">Knockout teams aren’t set yet — check back once the bracket is filled.</p>
+              )
+            ) : (
+              <div className="text-sm">
+                <span className="text-gray-500 mr-2">Your picks:</span>
+                {ownFinalist ? (
+                  <span className="inline-flex flex-wrap items-center gap-1.5">
+                    {finalistChip(ownFinalist.team_a)}
+                    {finalistChip(ownFinalist.team_b)}
+                  </span>
+                ) : (
+                  <span className="text-gray-400 italic">no pick</span>
+                )}
+              </div>
+            )}
+
+            {othersFinalists.length > 0 && (
+              <details className="mt-4">
+                <summary className="cursor-pointer select-none text-xs text-gray-500 hover:text-gray-700">
+                  Everyone’s finalist picks
+                </summary>
+                <div className="mt-2 divide-y">
+                  {othersFinalists.map(({ profile, pick }) => (
+                    <div key={pick.user_id} className="flex items-center gap-2 py-1.5">
+                      <span className="text-sm flex-1 min-w-0 truncate">
+                        {teamFlag(profile.favorite_team) && <span className="mr-1">{teamFlag(profile.favorite_team)}</span>}
+                        {profile.display_name}
+                      </span>
+                      <span className="flex items-center gap-1.5 shrink-0">
+                        {finalistChip(pick.team_a)}
+                        {finalistChip(pick.team_b)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </div>
+        </section>
+      )}
 
       <BonusGuide />
     </div>
