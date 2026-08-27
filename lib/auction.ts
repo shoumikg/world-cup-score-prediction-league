@@ -2,7 +2,7 @@
 //
 // Two captained teams (red & blue) bid on players from a fixed purse. There is
 // no bid step — any integer raise of at least 1 wins the lead — and each bid
-// (re)starts a 10-second clock after which the highest bid wins automatically.
+// (re)starts a 30-second clock after which the highest bid wins automatically.
 // Each captain also has a 10-minute hold budget: an active hold freezes the
 // clock while burning the holder's budget (released by toggle, their next bid,
 // or exhaustion). The roster cap is derived from the player-list size (16
@@ -51,7 +51,7 @@ export interface AuctionTeamRow {
 
 export const MIN_BID = 1
 export const BID_INCREMENTS = [5, 10, 20] as const
-export const BID_TIMEOUT_MS = 10_000
+export const BID_TIMEOUT_MS = 30_000
 export const HOLD_BUDGET_MS = 10 * 60_000
 
 export const TEAM_LABELS: Record<AuctionTeamId, string> = { red: 'Red', blue: 'Blue' }
@@ -100,7 +100,7 @@ export function maxBid(stats: TeamStats): number {
 /**
  * Milliseconds until the current bid wins; null when no clock is running.
  * While a hold is active the elapsed time freezes at the moment the hold
- * began (a bid placed during a hold starts fully frozen at 10s).
+ * began (a bid placed during a hold starts fully frozen at the full timeout).
  */
 export function bidRemainingMs(player: AuctionPlayer, nowMs: number): number | null {
   if (player.status !== 'on_block') return null

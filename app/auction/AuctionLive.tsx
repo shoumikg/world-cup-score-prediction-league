@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   auctionPhase, bidRemainingMs, holdRemainingMs, maxBid, teamStats,
-  MIN_BID, BID_INCREMENTS, TEAM_LABELS,
+  MIN_BID, BID_INCREMENTS, BID_TIMEOUT_MS, TEAM_LABELS,
   type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId, type TeamStats, type AuctionEvent,
 } from '@/lib/auction'
 import {
@@ -56,9 +56,11 @@ function feedLine(e: AuctionEvent) {
     case 'clock_stopped':
       return <>⏸ Auctioneer stops the clock</>
     case 'clock_restarted':
-      return <>⏱ Fresh 10 seconds on the clock</>
+      return <>⏱ Fresh {BID_TIMEOUT_S} seconds on the clock</>
   }
 }
+
+const BID_TIMEOUT_S = BID_TIMEOUT_MS / 1000
 
 const POLL_MS = 3000
 const POLL_TIMED_MS = 1500     // faster while a sold-timer is running
@@ -158,7 +160,7 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
 
   // One-time clock-skew probe: countdowns compare the device clock against
   // server-written timestamps, and a device clock a few seconds off silently
-  // breaks a 10-second timer (fast → everything looks instantly expired and a
+  // breaks a short bid timer (fast → everything looks instantly expired and a
   // captain's bid UI goes dead; slow → surprise sales). The same-origin
   // favicon response's Date header gives Vercel's clock; centre it against the
   // request round-trip and ignore sub-1.5s noise (the header has 1s grain).
@@ -273,7 +275,7 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
         </div>
       </div>
       <p className="text-sm text-gray-500 mb-5">
-        {TEAM_LABELS.red} vs {TEAM_LABELS.blue} · live player auction · highest bid wins after a 10-second clock · captains can pause it with 10 minutes of hold time
+        {TEAM_LABELS.red} vs {TEAM_LABELS.blue} · live player auction · highest bid wins after a {BID_TIMEOUT_S}-second clock · captains can pause it with 10 minutes of hold time
         {captainOf && <span className="ml-2 font-semibold text-gray-700">— you captain {TEAM_LABELS[captainOf]}</span>}
       </p>
 
@@ -324,7 +326,7 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
                     )}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500 mb-1">No bids yet · minimum bid {MIN_BID} · first bid starts the 10s clock</p>
+                  <p className="text-sm text-gray-500 mb-1">No bids yet · minimum bid {MIN_BID} · first bid starts the {BID_TIMEOUT_S}s clock</p>
                 )}
 
                 {/* Captain bidding — stage an amount, then confirm */}
@@ -487,9 +489,9 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
                               onClick={() => run(() => restartClock(onBlock.id))}
                               disabled={isPending || onBlock.current_bid === null}
                               className="text-xs text-gray-600 border px-3 py-1.5 rounded hover:bg-gray-50 transition-colors disabled:opacity-40"
-                              title="Start a fresh 10-second clock on the standing bid"
+                              title={`Start a fresh ${BID_TIMEOUT_S}-second clock on the standing bid`}
                             >
-                              ▶ Restart clock (10s)
+                              ▶ Restart clock ({BID_TIMEOUT_S}s)
                             </button>
                           )}
                           {onBlock.bid_placed_at !== null && (
@@ -497,9 +499,9 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
                               onClick={() => run(() => restartClock(onBlock.id))}
                               disabled={isPending || onBlock.current_bid === null}
                               className="text-xs text-gray-600 border px-3 py-1.5 rounded hover:bg-gray-50 transition-colors disabled:opacity-40"
-                              title="Reset the sold-clock to a fresh 10 seconds"
+                              title={`Reset the sold-clock to a fresh ${BID_TIMEOUT_S} seconds`}
                             >
-                              ↺ Fresh 10s
+                              ↺ Fresh {BID_TIMEOUT_S}s
                             </button>
                           )}
                           {holdingTeam && (
@@ -547,7 +549,7 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
                             }}
                             disabled={isPending || !/^\d+$/.test(overrideAmount.trim())}
                             className="text-xs text-gray-600 border px-3 py-1 rounded hover:bg-gray-50 transition-colors disabled:opacity-40"
-                            title="Overwrite the current bid (restarts a fresh 10-second clock)"
+                            title={`Overwrite the current bid (restarts a fresh ${BID_TIMEOUT_S}-second clock)`}
                           >
                             Set
                           </button>
