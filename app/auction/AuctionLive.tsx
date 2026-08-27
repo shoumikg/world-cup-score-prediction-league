@@ -61,7 +61,8 @@ function feedLine(e: AuctionEvent) {
 }
 
 const POLL_MS = 3000
-const POLL_TIMED_MS = 1500 // faster while a sold-timer is running
+const POLL_TIMED_MS = 1500     // faster while a sold-timer is running
+const POLL_COMPLETE_MS = 15000 // slow once the auction is done
 const STALE_MS = 15000
 
 const TEAM_STYLES: Record<AuctionTeamId, { card: string; chip: string; text: string; solid: string }> = {
@@ -75,10 +76,9 @@ interface Props {
   initialEvents: AuctionEvent[]
   isAdmin: boolean
   captainOf: AuctionTeamId | null
-  isLoggedIn: boolean
 }
 
-export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdmin, captainOf, isLoggedIn }: Props) {
+export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdmin, captainOf }: Props) {
   const [players, setPlayers] = useState(initialPlayers)
   const [teams, setTeams] = useState(initialTeams)
   const [events, setEvents] = useState(initialEvents)
@@ -93,18 +93,44 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
   const lastOkRef = useRef(Date.now())
   const lastFinalizeRef = useRef(0)
   const lastHoldReleaseRef = useRef(0)
+  const clockOffsetRef = useRef(0) // serverNow − clientNow, measured once
+  const eventsRef = useRef(initialEvents)
+  const pollCountRef = useRef(0)
 
   const refetch = useCallback(async () => {
     if (!supabaseRef.current) supabaseRef.current = createClient()
     const supabase = supabaseRef.current
+    // Feed is delta-fetched against the newest id we hold (full resync every
+    // 20th poll to self-heal after an auction reset) — the 50-row feed was the
+    // bulk of the polling payload.
+    const maxEventId = eventsRef.current[0]?.id ?? 0
+    const fullFeed = maxEventId === 0 || pollCountRef.current % 20 === 0
+    pollCountRef.current += 1
+    const eventsQuery = fullFeed
+      ? supabase.from('auction_events').select('*').order('id', { ascending: false }).limit(50)
+      : supabase.from('auction_events').select('*').gt('id', maxEventId).order('id', { ascending: false }).limit(50)
     const [{ data: p, error: pe }, { data: t, error: te }, { data: ev }] = await Promise.all([
       supabase.from('auction_players').select('*').order('id'),
       supabase.from('auction_teams').select('*'),
-      supabase.from('auction_events').select('*').order('id', { ascending: false }).limit(50),
+      eventsQuery,
     ])
     if (!pe && p) setPlayers(p as AuctionPlayer[])
     if (!te && t) setTeams(t as AuctionTeamRow[])
-    if (ev) setEvents(ev as AuctionEvent[])
+    if (ev) {
+      const rows = ev as AuctionEvent[]
+      if (fullFeed) {
+        eventsRef.current = rows
+        setEvents(rows)
+      } else if (rows.length > 0) {
+        const known = new Set(eventsRef.current.map(e => e.id))
+        const fresh = rows.filter(e => !known.has(e.id))
+        if (fresh.length > 0) {
+          const merged = [...fresh, ...eventsRef.current].slice(0, 50)
+          eventsRef.current = merged
+          setEvents(merged)
+        }
+      }
+    }
     if (!pe && !te) {
       lastOkRef.current = Date.now()
       setStale(false)
@@ -117,22 +143,47 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
   const onBlock = players.find(p => p.status === 'on_block') ?? null
   const hasTimedBid = !!(onBlock && onBlock.current_bid !== null && onBlock.bid_placed_at)
 
-  // Poll — faster while the sold-timer is running, paused when the tab is hidden.
+  // Poll — faster while the sold-timer is running, slow once the auction is
+  // complete, paused when the tab is hidden.
   useEffect(() => {
     const tick = () => { if (!document.hidden) refetch() }
-    const id = setInterval(tick, hasTimedBid ? POLL_TIMED_MS : POLL_MS)
+    const interval = hasTimedBid ? POLL_TIMED_MS : phase === 'complete' ? POLL_COMPLETE_MS : POLL_MS
+    const id = setInterval(tick, interval)
     document.addEventListener('visibilitychange', tick)
     return () => {
       clearInterval(id)
       document.removeEventListener('visibilitychange', tick)
     }
-  }, [refetch, hasTimedBid])
+  }, [refetch, hasTimedBid, phase])
+
+  // One-time clock-skew probe: countdowns compare the device clock against
+  // server-written timestamps, and a device clock a few seconds off silently
+  // breaks a 10-second timer (fast → everything looks instantly expired and a
+  // captain's bid UI goes dead; slow → surprise sales). The same-origin
+  // favicon response's Date header gives Vercel's clock; centre it against the
+  // request round-trip and ignore sub-1.5s noise (the header has 1s grain).
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const t0 = Date.now()
+        const res = await fetch('/favicon.ico', { method: 'HEAD', cache: 'no-store' })
+        const t1 = Date.now()
+        const dateHeader = res.headers.get('date')
+        if (cancelled || !dateHeader) return
+        const offset = Date.parse(dateHeader) + 500 - (t0 + t1) / 2
+        clockOffsetRef.current = Math.abs(offset) > 1500 ? offset : 0
+        setNowMs(Date.now() + clockOffsetRef.current)
+      } catch { /* unmeasurable — leave offset at 0 */ }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   // Local clock for the countdown (only ticks while a timed bid is live).
   useEffect(() => {
-    setNowMs(Date.now())
+    setNowMs(Date.now() + clockOffsetRef.current)
     if (!hasTimedBid) return
-    const id = setInterval(() => setNowMs(Date.now()), 250)
+    const id = setInterval(() => setNowMs(Date.now() + clockOffsetRef.current), 250)
     return () => clearInterval(id)
   }, [hasTimedBid])
 
@@ -144,25 +195,26 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
     ? holdRemainingMs(holdingTeamRow, onBlock, nowMs)
     : null
 
-  // When the countdown runs out, any logged-in viewer's client closes the sale.
-  // The server re-verifies expiry and optimistic-locks the write, so early or
-  // duplicate calls are harmless no-ops.
+  // When the countdown runs out, any viewer's client — anonymous spectators
+  // included — closes the sale. The server re-verifies expiry and
+  // optimistic-locks the write, so early or duplicate calls are harmless
+  // no-ops, and the sale never depends on a particular tab being awake.
   useEffect(() => {
-    if (!isLoggedIn || !onBlock || !expired) return
+    if (!onBlock || !expired) return
     if (Date.now() - lastFinalizeRef.current < 1500) return
     lastFinalizeRef.current = Date.now()
     finalizeExpiredBid(onBlock.id).then(() => refetch()).catch(() => {})
-  }, [isLoggedIn, onBlock, expired, nowMs, refetch])
+  }, [onBlock, expired, nowMs, refetch])
 
   // Likewise for a hold whose budget has run out — the server re-verifies
   // exhaustion, so early or duplicate calls can't cut a hold short.
   useEffect(() => {
-    if (!isLoggedIn || !onBlock || holdingTeam === null) return
+    if (!onBlock || holdingTeam === null) return
     if (holdBudgetLeft === null || holdBudgetLeft > 0) return
     if (Date.now() - lastHoldReleaseRef.current < 1500) return
     lastHoldReleaseRef.current = Date.now()
     releaseExhaustedHold(onBlock.id).then(() => refetch()).catch(() => {})
-  }, [isLoggedIn, onBlock, holdingTeam, holdBudgetLeft, nowMs, refetch])
+  }, [onBlock, holdingTeam, holdBudgetLeft, nowMs, refetch])
 
   // Reset the staged bid and override inputs whenever a different player comes up.
   const onBlockId = onBlock?.id
@@ -212,7 +264,7 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
     )
 
   return (
-    <div className="max-w-4xl mx-auto px-3 sm:px-4 py-6">
+    <div className={`max-w-4xl mx-auto px-3 sm:px-4 py-6 ${captainOf ? 'pb-16 sm:pb-6' : ''}`}>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
         <h1 className="text-xl font-bold">⚽ Reunion Auction</h1>
         <div className="flex items-center gap-2">
@@ -231,51 +283,6 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
         </div>
       ) : (
         <>
-          {/* Team cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            {teams
-              .slice()
-              .sort(a => (a.team === 'red' ? -1 : 1))
-              .map(t => {
-                const s = statsByTeam.get(t.team)!
-                const roster = players.filter(p => p.status === 'sold' && p.team === t.team)
-                const leading = onBlock?.current_bidder === t.team
-                return (
-                  <div key={t.team} className={`rounded-xl border shadow-sm p-4 ${TEAM_STYLES[t.team].card}`}>
-                    <div className="flex items-baseline justify-between gap-2 mb-0.5">
-                      <h2 className={`font-bold ${TEAM_STYLES[t.team].text}`}>
-                        Team {TEAM_LABELS[t.team]}
-                        {leading && <span className="ml-2 text-xs font-semibold animate-pulse">● leading</span>}
-                      </h2>
-                      <span className="text-xs text-gray-500">{s.rosterCount}/{s.cap} players</span>
-                    </div>
-                    <p className="text-xs text-gray-500 mb-2">
-                      Captain: <span className="font-medium text-gray-700">{t.captain_name ?? 'TBD'}</span>
-                    </p>
-                    <p className="text-sm mb-2">
-                      <span className="font-bold text-gray-900">{s.remaining}</span>
-                      <span className="text-xs text-gray-500"> / {s.purse} purse left</span>
-                      {nowMs > 0 && (
-                        <span className="text-xs text-gray-500 ml-2">
-                          · ⏸ {fmtMins(holdRemainingMs(t, onBlock, nowMs))} hold left
-                        </span>
-                      )}
-                    </p>
-                    {roster.length > 0 && (
-                      <ul className="text-xs text-gray-700 space-y-0.5">
-                        {roster.map(p => (
-                          <li key={p.id} className="flex justify-between gap-2">
-                            <span className="truncate">{p.name}</span>
-                            <span className="font-semibold tabular-nums shrink-0">{p.price}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                )
-              })}
-          </div>
-
           {/* The block */}
           <div className="bg-white rounded-xl border shadow-sm p-5 mb-6 text-center">
             {onBlock ? (
@@ -327,7 +334,8 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
                   const myHoldLeft = nowMs > 0 ? holdRemainingMs(myTeamRow, onBlock, nowMs) : 0
                   const iHold = holdingTeam === captainOf
                   const canStartHold =
-                    holdingTeam === null && onBlock.current_bid !== null && !expired && myHoldLeft >= 1000
+                    holdingTeam === null && onBlock.current_bid !== null &&
+                    onBlock.bid_placed_at !== null && !expired && myHoldLeft >= 1000
                   const cap = maxBid(myStats)
                   const leading = onBlock.current_bidder === captainOf
                   const current = onBlock.current_bid ?? 0
@@ -353,7 +361,7 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
                               : myHoldLeft < 1000 ? 'No hold time left'
                               : 'Pause the clock while you think — uses your hold time'
                             }
-                            className={`text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors disabled:opacity-40 ${
+                            className={`text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors disabled:opacity-40 ${
                               iHold
                                 ? 'bg-amber-500 hover:bg-amber-600 text-white'
                                 : 'border border-amber-300 text-amber-700 hover:bg-amber-50'
@@ -364,6 +372,14 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
                           {iHold && (
                             <p className="text-xs text-amber-600 mt-1">
                               Clock paused — your hold time is running. Bidding also resumes the clock.
+                            </p>
+                          )}
+                          {!iHold && !canStartHold && (
+                            <p className="text-xs text-gray-400 mt-1">
+                              {holdingTeam ? `${TEAM_LABELS[holdingTeam]} is holding`
+                                : myHoldLeft < 1000 ? 'No hold time left'
+                                : onBlock.bid_placed_at === null ? 'Clock is stopped — nothing to hold'
+                                : 'Hold unavailable right now'}
                             </p>
                           )}
                         </div>
@@ -382,7 +398,7 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
                                 key={inc}
                                 onClick={() => setStagedText(String((staged !== null && staged > current ? staged : current) + inc))}
                                 disabled={isPending || expired}
-                                className="text-sm font-semibold border px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
+                                className="text-sm font-semibold border px-4 py-2.5 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
                               >
                                 +{inc}
                               </button>
@@ -393,14 +409,14 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
                               onChange={e => setStagedText(e.target.value)}
                               placeholder="Amount"
                               disabled={isPending || expired}
-                              className="w-24 border rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-400"
+                              className="w-24 border rounded-lg px-2 py-2.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-400"
                             />
                           </div>
                           <div className="flex items-center justify-center gap-2 flex-wrap">
                             <button
                               onClick={() => staged !== null && submitBid(onBlock.id, staged)}
                               disabled={!canConfirm}
-                              className={`text-white text-sm font-bold px-5 py-2 rounded-lg transition-colors disabled:opacity-40 ${TEAM_STYLES[captainOf].solid}`}
+                              className={`text-white text-sm font-bold px-6 py-2.5 rounded-lg transition-colors disabled:opacity-40 ${TEAM_STYLES[captainOf].solid}`}
                             >
                               {expired ? 'Selling…' : staged !== null ? `Place bid ${staged}` : 'Place bid'}
                             </button>
@@ -408,7 +424,7 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
                               <button
                                 onClick={() => setStagedText('')}
                                 disabled={isPending}
-                                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                                className="text-xs text-gray-400 hover:text-gray-600 transition-colors px-3 py-2"
                               >
                                 clear
                               </button>
@@ -590,6 +606,51 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
             {msg && <p className="text-xs text-red-500 mt-3">{msg}</p>}
           </div>
 
+          {/* Team cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+            {teams
+              .slice()
+              .sort(a => (a.team === 'red' ? -1 : 1))
+              .map(t => {
+                const s = statsByTeam.get(t.team)!
+                const roster = players.filter(p => p.status === 'sold' && p.team === t.team)
+                const leading = onBlock?.current_bidder === t.team
+                return (
+                  <div key={t.team} className={`rounded-xl border shadow-sm p-4 ${TEAM_STYLES[t.team].card}`}>
+                    <div className="flex items-baseline justify-between gap-2 mb-0.5">
+                      <h2 className={`font-bold ${TEAM_STYLES[t.team].text}`}>
+                        Team {TEAM_LABELS[t.team]}
+                        {leading && <span className="ml-2 text-xs font-semibold animate-pulse">● leading</span>}
+                      </h2>
+                      <span className="text-xs text-gray-500">{s.rosterCount}/{s.cap} players</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Captain: <span className="font-medium text-gray-700">{t.captain_name ?? 'TBD'}</span>
+                    </p>
+                    <p className="text-sm mb-2">
+                      <span className="font-bold text-gray-900">{s.remaining}</span>
+                      <span className="text-xs text-gray-500"> / {s.purse} purse left</span>
+                      {nowMs > 0 && (
+                        <span className="text-xs text-gray-500 ml-2">
+                          · ⏸ {fmtMins(holdRemainingMs(t, onBlock, nowMs))} hold left
+                        </span>
+                      )}
+                    </p>
+                    {roster.length > 0 && (
+                      <ul className="text-xs text-gray-700 space-y-0.5">
+                        {roster.map(p => (
+                          <li key={p.id} className="flex justify-between gap-2">
+                            <span className="truncate">{p.name}</span>
+                            <span className="font-semibold tabular-nums shrink-0">{p.price}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )
+              })}
+          </div>
+
           {/* Live feed */}
           {events.length > 0 && (
             <div className="bg-white rounded-xl border shadow-sm mb-6">
@@ -667,6 +728,30 @@ export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdm
             </div>
           )}
         </>
+      )}
+
+      {/* Captains on phones: pinned strip so the price and clock stay visible
+          while scrolling (display only — controls are in the block card). */}
+      {captainOf && onBlock && onBlock.current_bid !== null && (
+        <div className="fixed bottom-0 inset-x-0 z-30 bg-gray-900/95 text-white px-4 py-2.5 flex items-center justify-center gap-3 text-sm sm:hidden">
+          <span className="truncate font-medium">{onBlock.name}</span>
+          {onBlock.current_bidder && (
+            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded shrink-0 ${TEAM_STYLES[onBlock.current_bidder].chip}`}>
+              {TEAM_LABELS[onBlock.current_bidder]} {onBlock.current_bid}
+            </span>
+          )}
+          {holdingTeam ? (
+            <span className="text-amber-300 font-bold shrink-0">⏸ held</span>
+          ) : onBlock.bid_placed_at === null ? (
+            <span className="text-gray-400 font-bold shrink-0">⏸</span>
+          ) : expired ? (
+            <span className="font-bold animate-pulse shrink-0">🔨</span>
+          ) : secondsLeft !== null && (
+            <span className={`font-bold tabular-nums shrink-0 ${secondsLeft <= 3 ? 'text-red-400' : ''}`}>
+              ⏱ {secondsLeft}s
+            </span>
+          )}
+        </div>
       )}
     </div>
   )

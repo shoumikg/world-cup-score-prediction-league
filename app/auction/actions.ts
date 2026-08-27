@@ -247,6 +247,7 @@ async function loadBlockReleasingHold(
     if (teamRow) {
       const res = await endHold(db, player, teamRow, Date.now())
       if (res.error) return { error: res.error }
+      if (!res.released) return { error: 'The state just changed — try again.' }
       player.hold_team = null
       player.hold_started_at = null
     }
@@ -375,7 +376,8 @@ export async function forceReleaseHold(playerId: number): Promise<{ error?: stri
 
   const res = await endHold(db, player, teamRow, Date.now())
   if (res.error) return { error: res.error }
-  if (res.released) await logEvent(db, 'hold_end', { playerName: player.name, team: teamRow.team })
+  if (!res.released) return { error: 'The state just changed — try again.' }
+  await logEvent(db, 'hold_end', { playerName: player.name, team: teamRow.team })
   return {}
 }
 
@@ -561,9 +563,10 @@ export async function placeBid(playerId: number, amount: number): Promise<{ erro
 // finalise calls resolve to one winner, and a bid that landed in the meantime
 // (restarting the clock) makes this a silent no-op.
 export async function finalizeExpiredBid(playerId: number): Promise<{ error?: string; sold?: boolean }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not logged in.' }
+  // Deliberately no auth: expiry and the winning bid are re-verified here and
+  // the write is optimistic-locked, so any viewer — anonymous spectators
+  // included — may trigger the close. That removes the dependency on a
+  // logged-in tab being awake at the buzzer.
   if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
 
   const db = getAdminClient()
@@ -598,6 +601,9 @@ export async function finalizeExpiredBid(playerId: number): Promise<{ error?: st
     .eq('status', 'on_block')
     .eq('current_bid', player.current_bid)
     .eq('current_bidder', player.current_bidder)
+    // Lock on the exact clock we verified as expired — an admin Stop clock /
+    // Fresh 10s landing mid-flight makes this a 0-row miss, not a sale.
+    .eq('bid_placed_at', player.bid_placed_at!)
     .select('id')
   if (error) return dbError('Failed to close the sale', error)
   const sold = (data?.length ?? 0) > 0
@@ -630,14 +636,21 @@ async function endHold(
     update.bid_placed_at = new Date(placedMs + shift).toISOString()
   }
 
-  const { data, error } = await db
+  let query = db
     .from('auction_players')
     .update(update)
     .eq('id', player.id)
     .eq('status', 'on_block')
     .eq('hold_team', teamRow.team)
     .eq('hold_started_at', player.hold_started_at!)
-    .select('id')
+  // Also lock on the clock we computed the shift from: a bid landing during
+  // the release (which restarts the clock but leaves the hold columns alone)
+  // must make this a 0-row miss, never an overwrite of the fresh clock.
+  query = player.bid_placed_at === null
+    ? query.is('bid_placed_at', null)
+    : query.eq('bid_placed_at', player.bid_placed_at)
+
+  const { data, error } = await query.select('id')
   if (error) return dbError('Failed to release the hold', error)
   if (!data?.length) return { released: false } // already released or superseded
 
@@ -677,7 +690,8 @@ export async function toggleHold(playerId: number): Promise<{ error?: string; ho
   if (player.hold_team === myTeam.team) {
     const res = await endHold(db, player, myTeam, now)
     if (res.error) return { error: res.error }
-    if (res.released) await logEvent(db, 'hold_end', { playerName: player.name, team: myTeam.team })
+    if (!res.released) return { error: 'The state just changed — try again.' }
+    await logEvent(db, 'hold_end', { playerName: player.name, team: myTeam.team })
     return { holding: false }
   }
 
@@ -712,9 +726,8 @@ export async function toggleHold(playerId: number): Promise<{ error?: string; ho
 // calls this; the server re-verifies exhaustion, so it cannot end a hold
 // early, and endHold's clamping means overrun never becomes free pause.
 export async function releaseExhaustedHold(playerId: number): Promise<{ error?: string; released?: boolean }> {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return { error: 'Not logged in.' }
+  // Deliberately no auth — exhaustion is re-verified server-side and the
+  // release is optimistic-locked, mirroring finalizeExpiredBid.
   if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
 
   const db = getAdminClient()
