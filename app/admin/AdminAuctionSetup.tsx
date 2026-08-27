@@ -5,8 +5,23 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
   addAuctionPlayer, deleteAuctionPlayer, setAuctionCaptain, setAuctionPurse, resetAuction,
+  setHoldRemaining,
 } from '@/app/auction/actions'
-import { TEAM_LABELS, type AuctionPlayer, type AuctionTeamRow } from '@/lib/auction'
+import { TEAM_LABELS, HOLD_BUDGET_MS, type AuctionPlayer, type AuctionTeamRow } from '@/lib/auction'
+
+// "m:ss" or plain seconds → seconds; null when unparseable.
+function parseMinSec(raw: string): number | null {
+  const t = raw.trim()
+  const m = t.match(/^(\d{1,2}):([0-5]?\d)$/)
+  if (m) return parseInt(m[1], 10) * 60 + parseInt(m[2], 10)
+  if (/^\d+$/.test(t)) return parseInt(t, 10)
+  return null
+}
+
+function fmtMinSec(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  return `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, '0')}`
+}
 
 interface ProfileOption {
   id: string
@@ -23,6 +38,7 @@ export function AdminAuctionSetup({ players, teams, profiles }: Props) {
   const router = useRouter()
   const [name, setName] = useState('')
   const [purse, setPurse] = useState(teams[0]?.purse.toString() ?? '1000')
+  const [holdInputs, setHoldInputs] = useState<Record<string, string>>({})
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -73,6 +89,39 @@ export function AdminAuctionSetup({ players, teams, profiles }: Props) {
               </select>
             </div>
           ))}
+        {/* Hold-time override: set how much hold each captain has left */}
+        <div className="flex flex-col gap-2 pt-1 border-t">
+          {teams
+            .slice()
+            .sort(a => (a.team === 'red' ? -1 : 1))
+            .map(t => {
+              const left = HOLD_BUDGET_MS - t.hold_used_ms
+              const raw = holdInputs[t.team] ?? ''
+              const parsed = parseMinSec(raw)
+              return (
+                <div key={t.team} className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs font-semibold text-gray-500 w-20">Hold {TEAM_LABELS[t.team]}</span>
+                  <span className="text-xs text-gray-400 w-14 tabular-nums">{fmtMinSec(left)} left</span>
+                  <input
+                    type="text" value={raw} placeholder="m:ss"
+                    onChange={e => setHoldInputs(h => ({ ...h, [t.team]: e.target.value }))}
+                    disabled={isPending}
+                    className="w-16 border rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-400"
+                  />
+                  <button
+                    onClick={() => {
+                      if (parsed !== null) run(() => setHoldRemaining(t.team, parsed), 'Hold time set!')
+                    }}
+                    disabled={isPending || parsed === null || parsed * 1000 > HOLD_BUDGET_MS}
+                    className="text-xs text-gray-600 border px-3 py-1 rounded hover:bg-gray-50 transition-colors disabled:opacity-40"
+                    title="Set the hold time this captain has left (up to 10:00)"
+                  >
+                    Set
+                  </button>
+                </div>
+              )
+            })}
+        </div>
         <div className="flex items-center gap-2 flex-wrap pt-1 border-t">
           <span className="text-xs font-semibold text-gray-500 w-20">Purse</span>
           <input

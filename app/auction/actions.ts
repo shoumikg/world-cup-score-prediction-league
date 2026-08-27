@@ -3,7 +3,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import {
-  validateBid, bidExpired, holdRemainingMs, nextAuctionPool, HOLD_BUDGET_MS, TEAM_LABELS,
+  validateBid, bidExpired, holdRemainingMs, nextAuctionPool, teamStats, maxBid,
+  HOLD_BUDGET_MS, TEAM_LABELS,
   type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId,
 } from '@/lib/auction'
 
@@ -168,6 +169,211 @@ export async function putRandomOnBlock(): Promise<{ error?: string }> {
   return {}
 }
 
+// Manual override: put a specific player on the block (the 🎲 draw is the
+// normal path; this covers corrections and special moments).
+export async function putSpecificOnBlock(playerId: number): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
+
+  const db = getAdminClient()
+  const { data, error } = await db
+    .from('auction_players')
+    .update({ status: 'on_block', current_bid: null, current_bidder: null, bid_placed_at: null, hold_team: null, hold_started_at: null })
+    .eq('id', playerId)
+    .in('status', ['pending', 'unsold'])
+    .select('id')
+  if (error) {
+    if (error.code === '23505') return { error: 'Another player is already on the block.' }
+    return dbError('Failed to put player on the block', error)
+  }
+  if (!data?.length) return { error: 'That player cannot go on the block.' }
+  return {}
+}
+
+// Manual override: send the on-block player back to the pending pool (unlike
+// "Unsold", they rejoin the first-round draw), clearing bids and any hold.
+export async function returnToPool(playerId: number): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
+
+  const db = getAdminClient()
+  const { data, error } = await db
+    .from('auction_players')
+    .update({ status: 'pending', current_bid: null, current_bidder: null, bid_placed_at: null, hold_team: null, hold_started_at: null })
+    .eq('id', playerId)
+    .eq('status', 'on_block')
+    .select('id')
+  if (error) return dbError('Failed to return player to the pool', error)
+  if (!data?.length) return { error: 'That player is not on the block.' }
+  return {}
+}
+
+// Loads the on-block player and, if a hold is running, ends it fairly
+// (charging actual usage) so a clock override never strands hold state.
+async function loadBlockReleasingHold(
+  db: ReturnType<typeof getAdminClient>,
+  playerId: number
+): Promise<{ error: string } | { player: AuctionPlayer }> {
+  const [{ data: playerRaw }, { data: teamsRaw }] = await Promise.all([
+    db.from('auction_players').select('*').eq('id', playerId).single(),
+    db.from('auction_teams').select('*'),
+  ])
+  const player = playerRaw as AuctionPlayer | null
+  if (!player || player.status !== 'on_block') return { error: 'That player is not on the block.' }
+
+  if (player.hold_team !== null) {
+    const teamRow = ((teamsRaw ?? []) as AuctionTeamRow[]).find(t => t.team === player.hold_team)
+    if (teamRow) {
+      const res = await endHold(db, player, teamRow, Date.now())
+      if (res.error) return { error: res.error }
+      player.hold_team = null
+      player.hold_started_at = null
+    }
+  }
+  return { player }
+}
+
+// Manual override: stop the sold-clock entirely (no captain budget involved).
+// The current bid stands; any new bid — or Restart clock — starts a fresh 10s.
+export async function stopClock(playerId: number): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
+
+  const db = getAdminClient()
+  const loaded = await loadBlockReleasingHold(db, playerId)
+  if ('error' in loaded) return { error: loaded.error }
+  if (loaded.player.current_bid === null) return { error: 'No clock running — there are no bids yet.' }
+
+  const { error } = await db
+    .from('auction_players')
+    .update({ bid_placed_at: null })
+    .eq('id', playerId)
+    .eq('status', 'on_block')
+  if (error) return dbError('Failed to stop the clock', error)
+  return {}
+}
+
+// Manual override: (re)start a fresh 10-second clock on the standing bid.
+export async function restartClock(playerId: number): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
+
+  const db = getAdminClient()
+  const loaded = await loadBlockReleasingHold(db, playerId)
+  if ('error' in loaded) return { error: loaded.error }
+  if (loaded.player.current_bid === null) return { error: 'There are no bids to run a clock on.' }
+
+  const { error } = await db
+    .from('auction_players')
+    .update({ bid_placed_at: new Date().toISOString() })
+    .eq('id', playerId)
+    .eq('status', 'on_block')
+  if (error) return dbError('Failed to restart the clock', error)
+  return {}
+}
+
+// Manual override: set the current bid outright (fix a fat-fingered amount or
+// wrong team). Validated against the team's reserve-rule cap so the override
+// can never create an unpayable price; restarts a fresh 10-second clock.
+export async function adminSetBid(
+  playerId: number,
+  team: string,
+  amount: number
+): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
+  if (!isTeamId(team)) return { error: 'Invalid team.' }
+  if (!Number.isInteger(amount) || amount < 1 || amount > 1_000_000)
+    return { error: 'Enter a valid amount.' }
+
+  const db = getAdminClient()
+  const [{ data: teamsRaw }, { data: playersRaw }] = await Promise.all([
+    db.from('auction_teams').select('*'),
+    db.from('auction_players').select('*'),
+  ])
+  const teams = (teamsRaw ?? []) as AuctionTeamRow[]
+  const players = (playersRaw ?? []) as AuctionPlayer[]
+  const player = players.find(p => p.id === playerId)
+  const teamRow = teams.find(t => t.team === team)
+  if (!player || player.status !== 'on_block') return { error: 'That player is not on the block.' }
+  if (!teamRow) return { error: 'Team not found.' }
+
+  const stats = teamStats(players, teamRow)
+  const cap = maxBid(stats)
+  if (cap < 1) return { error: `${TEAM_LABELS[team]} cannot buy this player (squad full or purse spent).` }
+  if (amount > cap) return { error: `${TEAM_LABELS[team]}’s max is ${cap} (purse reserve rule).` }
+
+  if (player.hold_team !== null) {
+    const holdRow = teams.find(t => t.team === player.hold_team)
+    if (holdRow) {
+      const res = await endHold(db, player, holdRow, Date.now())
+      if (res.error) return { error: res.error }
+    }
+  }
+
+  const { data, error } = await db
+    .from('auction_players')
+    .update({
+      current_bid: amount,
+      current_bidder: team,
+      bid_placed_at: new Date().toISOString(),
+      hold_team: null,
+      hold_started_at: null,
+    })
+    .eq('id', playerId)
+    .eq('status', 'on_block')
+    .select('id')
+  if (error) return dbError('Failed to set the bid', error)
+  if (!data?.length) return { error: 'The state just changed — try again.' }
+  return {}
+}
+
+// Manual override: end whichever hold is active right now (charged for the
+// time actually used, clamped at the holder's budget).
+export async function forceReleaseHold(playerId: number): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
+
+  const db = getAdminClient()
+  const [{ data: playerRaw }, { data: teamsRaw }] = await Promise.all([
+    db.from('auction_players').select('*').eq('id', playerId).single(),
+    db.from('auction_teams').select('*'),
+  ])
+  const player = playerRaw as AuctionPlayer | null
+  if (!player || player.status !== 'on_block' || player.hold_team === null)
+    return { error: 'No hold is active.' }
+  const teamRow = ((teamsRaw ?? []) as AuctionTeamRow[]).find(t => t.team === player.hold_team)
+  if (!teamRow) return { error: 'Team not found.' }
+
+  const res = await endHold(db, player, teamRow, Date.now())
+  if (res.error) return { error: res.error }
+  return {}
+}
+
+// Manual override: set how much hold time a team has left (0 up to the full
+// 10-minute budget) — for restoring time after a dispute or granting a redo.
+export async function setHoldRemaining(team: string, secondsLeft: number): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!isTeamId(team)) return { error: 'Invalid team.' }
+  if (!Number.isInteger(secondsLeft) || secondsLeft < 0 || secondsLeft * 1000 > HOLD_BUDGET_MS)
+    return { error: `Enter 0–${HOLD_BUDGET_MS / 60_000} minutes (in seconds).` }
+
+  const db = getAdminClient()
+  const { error } = await db
+    .from('auction_teams')
+    .update({ hold_used_ms: HOLD_BUDGET_MS - secondsLeft * 1000 })
+    .eq('team', team)
+  if (error) return dbError('Failed to set hold time', error)
+  return {}
+}
+
 // Hammer: optimistic-locked on the exact bid the admin saw, so a bid landing
 // at the same moment makes the hammer miss (0 rows) instead of selling at a
 // stale price.
@@ -240,7 +446,7 @@ export async function undoSold(playerId: number): Promise<{ error?: string }> {
   const db = getAdminClient()
   const { data, error } = await db
     .from('auction_players')
-    .update({ status: 'on_block', team: null, price: null, sold_at: null, bid_placed_at: new Date().toISOString(), hold_team: null, hold_started_at: null })
+    .update({ status: 'on_block', team: null, price: null, sold_at: null, bid_placed_at: null, hold_team: null, hold_started_at: null })
     .eq('id', playerId)
     .eq('status', 'sold')
     .select('id')
@@ -450,6 +656,8 @@ export async function toggleHold(playerId: number): Promise<{ error?: string; ho
   // Start a hold.
   if (player.current_bid === null)
     return { error: 'No clock to hold yet — it starts with the first bid.' }
+  if (player.bid_placed_at === null)
+    return { error: 'The clock is stopped — nothing to hold.' }
   if (bidExpired(player, now))
     return { error: 'Time’s up — this sale is closing.' }
   if (holdRemainingMs(myTeam, player, now) < 1000)

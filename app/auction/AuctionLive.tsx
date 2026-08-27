@@ -8,7 +8,8 @@ import {
   type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId, type TeamStats,
 } from '@/lib/auction'
 import {
-  placeBid, putRandomOnBlock, hammerSold, markUnsold, clearAuctionBids, undoSold,
+  placeBid, putRandomOnBlock, putSpecificOnBlock, hammerSold, markUnsold, clearAuctionBids,
+  undoSold, returnToPool, stopClock, restartClock, adminSetBid, forceReleaseHold,
   finalizeExpiredBid, toggleHold, releaseExhaustedHold,
 } from './actions'
 
@@ -42,6 +43,8 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
   const [stale, setStale] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [stagedText, setStagedText] = useState('')
+  const [overrideTeam, setOverrideTeam] = useState<AuctionTeamId>('red')
+  const [overrideAmount, setOverrideAmount] = useState('')
   const [nowMs, setNowMs] = useState(0) // 0 until mounted — avoids SSR/client clock mismatch
   const [isPending, startTransition] = useTransition()
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null)
@@ -117,9 +120,9 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
     releaseExhaustedHold(onBlock.id).then(() => refetch()).catch(() => {})
   }, [isLoggedIn, onBlock, holdingTeam, holdBudgetLeft, nowMs, refetch])
 
-  // Reset the staged bid whenever a different player comes up.
+  // Reset the staged bid and override inputs whenever a different player comes up.
   const onBlockId = onBlock?.id
-  useEffect(() => { setStagedText(''); setMsg(null) }, [onBlockId])
+  useEffect(() => { setStagedText(''); setOverrideAmount(''); setMsg(null) }, [onBlockId])
 
   function run(action: () => Promise<{ error?: string }>) {
     setMsg(null)
@@ -241,6 +244,13 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
                       {TEAM_LABELS[onBlock.current_bidder]}
                     </span>
                     <span className="text-3xl font-bold ml-2 tabular-nums">{onBlock.current_bid}</span>
+                    {onBlock.bid_placed_at === null && (
+                      <div className="mt-2">
+                        <span className="inline-block text-sm font-bold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                          ⏸ Clock stopped — the next bid starts it
+                        </span>
+                      </div>
+                    )}
                     {secondsLeft !== null && (
                       <div className="mt-2">
                         {holdingTeam ? (
@@ -370,30 +380,120 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
 
                 {/* Auctioneer backstop controls */}
                 {isAdmin && (
-                  <div className="mt-4 pt-4 border-t flex items-center justify-center gap-2 flex-wrap">
-                    <button
-                      onClick={() => run(() => hammerSold(onBlock.id, onBlock.current_bid!, onBlock.current_bidder!))}
-                      disabled={isPending || onBlock.current_bid === null}
-                      className="text-sm font-bold bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded transition-colors disabled:opacity-40"
-                    >
-                      🔨 Sold now{onBlock.current_bid !== null && onBlock.current_bidder
-                        ? ` — ${TEAM_LABELS[onBlock.current_bidder]} ${onBlock.current_bid}`
-                        : ''}
-                    </button>
-                    <button
-                      onClick={() => run(() => markUnsold(onBlock.id))}
-                      disabled={isPending}
-                      className="text-sm text-gray-600 border px-3 py-1.5 rounded hover:bg-gray-50 transition-colors disabled:opacity-50"
-                    >
-                      Unsold
-                    </button>
-                    <button
-                      onClick={() => run(() => clearAuctionBids(onBlock.id))}
-                      disabled={isPending || onBlock.current_bid === null}
-                      className="text-sm text-gray-600 border px-3 py-1.5 rounded hover:bg-gray-50 transition-colors disabled:opacity-40"
-                    >
-                      Clear bids
-                    </button>
+                  <div className="mt-4 pt-4 border-t">
+                    <div className="flex items-center justify-center gap-2 flex-wrap">
+                      <button
+                        onClick={() => run(() => hammerSold(onBlock.id, onBlock.current_bid!, onBlock.current_bidder!))}
+                        disabled={isPending || onBlock.current_bid === null}
+                        className="text-sm font-bold bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded transition-colors disabled:opacity-40"
+                      >
+                        🔨 Sold now{onBlock.current_bid !== null && onBlock.current_bidder
+                          ? ` — ${TEAM_LABELS[onBlock.current_bidder]} ${onBlock.current_bid}`
+                          : ''}
+                      </button>
+                      <button
+                        onClick={() => run(() => markUnsold(onBlock.id))}
+                        disabled={isPending}
+                        className="text-sm text-gray-600 border px-3 py-1.5 rounded hover:bg-gray-50 transition-colors disabled:opacity-50"
+                      >
+                        Unsold
+                      </button>
+                      <button
+                        onClick={() => run(() => clearAuctionBids(onBlock.id))}
+                        disabled={isPending || onBlock.current_bid === null}
+                        className="text-sm text-gray-600 border px-3 py-1.5 rounded hover:bg-gray-50 transition-colors disabled:opacity-40"
+                      >
+                        Clear bids
+                      </button>
+                    </div>
+
+                    <details className="mt-3 text-left">
+                      <summary className="cursor-pointer select-none text-xs text-gray-400 hover:text-gray-600 text-center">
+                        More overrides
+                      </summary>
+                      <div className="mt-3 space-y-3">
+                        <div className="flex items-center justify-center gap-2 flex-wrap">
+                          {onBlock.bid_placed_at !== null ? (
+                            <button
+                              onClick={() => run(() => stopClock(onBlock.id))}
+                              disabled={isPending || onBlock.current_bid === null}
+                              className="text-xs text-gray-600 border px-3 py-1.5 rounded hover:bg-gray-50 transition-colors disabled:opacity-40"
+                              title="Freeze the sold-clock without using any captain's hold time"
+                            >
+                              ⏸ Stop clock
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => run(() => restartClock(onBlock.id))}
+                              disabled={isPending || onBlock.current_bid === null}
+                              className="text-xs text-gray-600 border px-3 py-1.5 rounded hover:bg-gray-50 transition-colors disabled:opacity-40"
+                              title="Start a fresh 10-second clock on the standing bid"
+                            >
+                              ▶ Restart clock (10s)
+                            </button>
+                          )}
+                          {onBlock.bid_placed_at !== null && (
+                            <button
+                              onClick={() => run(() => restartClock(onBlock.id))}
+                              disabled={isPending || onBlock.current_bid === null}
+                              className="text-xs text-gray-600 border px-3 py-1.5 rounded hover:bg-gray-50 transition-colors disabled:opacity-40"
+                              title="Reset the sold-clock to a fresh 10 seconds"
+                            >
+                              ↺ Fresh 10s
+                            </button>
+                          )}
+                          {holdingTeam && (
+                            <button
+                              onClick={() => run(() => forceReleaseHold(onBlock.id))}
+                              disabled={isPending}
+                              className="text-xs text-amber-700 border border-amber-300 px-3 py-1.5 rounded hover:bg-amber-50 transition-colors disabled:opacity-40"
+                              title="End the active hold (charged for the time used)"
+                            >
+                              End {TEAM_LABELS[holdingTeam]}’s hold
+                            </button>
+                          )}
+                          <button
+                            onClick={() => run(() => returnToPool(onBlock.id))}
+                            disabled={isPending}
+                            className="text-xs text-gray-600 border px-3 py-1.5 rounded hover:bg-gray-50 transition-colors disabled:opacity-50"
+                            title="Send this player back into the draw pool (unlike Unsold, they rejoin the first round)"
+                          >
+                            Back to pool
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-center gap-2 flex-wrap">
+                          <span className="text-xs text-gray-400">Set bid</span>
+                          <select
+                            value={overrideTeam}
+                            onChange={e => setOverrideTeam(e.target.value as AuctionTeamId)}
+                            disabled={isPending}
+                            className="border rounded px-2 py-1 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-green-400"
+                          >
+                            <option value="red">{TEAM_LABELS.red}</option>
+                            <option value="blue">{TEAM_LABELS.blue}</option>
+                          </select>
+                          <input
+                            type="number" inputMode="numeric" min={1}
+                            value={overrideAmount}
+                            onChange={e => setOverrideAmount(e.target.value)}
+                            placeholder="Amount"
+                            disabled={isPending}
+                            className="w-20 border rounded px-2 py-1 text-xs text-center focus:outline-none focus:ring-2 focus:ring-green-400"
+                          />
+                          <button
+                            onClick={() => {
+                              const amt = parseInt(overrideAmount, 10)
+                              if (!isNaN(amt)) run(() => adminSetBid(onBlock.id, overrideTeam, amt))
+                            }}
+                            disabled={isPending || !/^\d+$/.test(overrideAmount.trim())}
+                            className="text-xs text-gray-600 border px-3 py-1 rounded hover:bg-gray-50 transition-colors disabled:opacity-40"
+                            title="Overwrite the current bid (restarts a fresh 10-second clock)"
+                          >
+                            Set
+                          </button>
+                        </div>
+                      </div>
+                    </details>
                   </div>
                 )}
               </>
@@ -422,6 +522,24 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
                 <p className="text-xs text-gray-400 mt-2">
                   Drawn at random. No clock runs until the first bid.
                 </p>
+                <details className="mt-3 text-left">
+                  <summary className="cursor-pointer select-none text-xs text-gray-400 hover:text-gray-600 text-center">
+                    Pick a specific player instead
+                  </summary>
+                  <div className="mt-2 flex flex-wrap gap-2 justify-center">
+                    {[...queue, ...unsoldList].map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => run(() => putSpecificOnBlock(p.id))}
+                        disabled={isPending}
+                        className="text-xs border px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                      >
+                        {p.name}
+                        {p.status === 'unsold' && <span className="text-gray-400 ml-1">(unsold)</span>}
+                      </button>
+                    ))}
+                  </div>
+                </details>
               </div>
             )}
 
@@ -476,7 +594,7 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
                       onClick={() => run(() => undoSold(p.id))}
                       disabled={isPending}
                       className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
-                      title="Undo — puts the player back on the block with this bid standing"
+                      title="Undo — back on the block with this bid standing and the clock stopped"
                     >
                       undo
                     </button>
