@@ -8,7 +8,7 @@ import {
   type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId, type TeamStats,
 } from '@/lib/auction'
 import {
-  placeBid, putOnBlock, hammerSold, markUnsold, clearAuctionBids, undoSold,
+  placeBid, putRandomOnBlock, hammerSold, markUnsold, clearAuctionBids, undoSold,
   finalizeExpiredBid, toggleHold, releaseExhaustedHold,
 } from './actions'
 
@@ -407,23 +407,21 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
               </p>
             )}
 
-            {/* Admin: choose who goes on the block next */}
+            {/* Admin: draw the next player at random from the remaining pool */}
             {isAdmin && !onBlock && (queue.length > 0 || unsoldList.length > 0) && (
-              <div className="mt-4 pt-4 border-t text-left">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Put on the block</p>
-                <div className="flex flex-wrap gap-2">
-                  {[...queue, ...unsoldList].map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => run(() => putOnBlock(p.id))}
-                      disabled={isPending}
-                      className="text-sm border px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
-                    >
-                      {p.name}
-                      {p.status === 'unsold' && <span className="text-xs text-gray-400 ml-1">(unsold)</span>}
-                    </button>
-                  ))}
-                </div>
+              <div className="mt-4 pt-4 border-t">
+                <button
+                  onClick={() => run(() => putRandomOnBlock())}
+                  disabled={isPending}
+                  className="text-sm font-bold bg-gray-800 hover:bg-gray-900 text-white px-5 py-2 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  🎲 Next player{queue.length > 0
+                    ? ` (${queue.length} in pool)`
+                    : ` (${unsoldList.length} unsold back in the pool)`}
+                </button>
+                <p className="text-xs text-gray-400 mt-2">
+                  Drawn at random. No clock runs until the first bid.
+                </p>
               </div>
             )}
 

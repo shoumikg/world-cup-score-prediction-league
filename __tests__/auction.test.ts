@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   rosterCap, teamStats, maxBid, validateBid, auctionPhase, bidRemainingMs, bidExpired,
-  holdRemainingMs, MIN_BID, BID_TIMEOUT_MS, HOLD_BUDGET_MS,
+  holdRemainingMs, nextAuctionPool, MIN_BID, BID_TIMEOUT_MS, HOLD_BUDGET_MS,
   type AuctionPlayer, type AuctionTeamRow, type AuctionPlayerStatus, type AuctionTeamId,
 } from '../lib/auction'
 
@@ -198,6 +198,25 @@ describe('hold', () => {
     expect(holdRemainingMs(teamRow('red'), p, at(30_000))).toBe(HOLD_BUDGET_MS)
     // Never negative once overrun.
     expect(holdRemainingMs(blue, p, at(HOLD_BUDGET_MS))).toBe(0)
+  })
+})
+
+describe('nextAuctionPool', () => {
+  it('draws from pending players while any remain', () => {
+    const pending = player()
+    const unsold = player({ status: 'unsold' })
+    expect(nextAuctionPool([pending, unsold, player({ status: 'sold', team: 'red', price: 5 })]))
+      .toEqual([pending])
+  })
+
+  it('falls back to the unsold pool once pending is empty', () => {
+    const unsold = player({ status: 'unsold' })
+    expect(nextAuctionPool([unsold, player({ status: 'sold', team: 'red', price: 5 })]))
+      .toEqual([unsold])
+  })
+
+  it('is empty when everyone is settled', () => {
+    expect(nextAuctionPool([player({ status: 'sold', team: 'red', price: 5 })])).toEqual([])
   })
 })
 

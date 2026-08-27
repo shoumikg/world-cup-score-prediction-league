@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
 import {
-  validateBid, bidExpired, holdRemainingMs, HOLD_BUDGET_MS, TEAM_LABELS,
+  validateBid, bidExpired, holdRemainingMs, nextAuctionPool, HOLD_BUDGET_MS, TEAM_LABELS,
   type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId,
 } from '@/lib/auction'
 
@@ -139,16 +139,24 @@ export async function resetAuction(): Promise<{ error?: string }> {
 
 // ── Auctioneer flow (admin) ───────────────────────────────────
 
-export async function putOnBlock(playerId: number): Promise<{ error?: string }> {
+// Draws a random player from the remaining pool (pending first, then unsold
+// for a second round) and puts them on the block with no clock running — the
+// first bid starts the 10-second timer.
+export async function putRandomOnBlock(): Promise<{ error?: string }> {
   const auth = await requireAdmin()
   if ('error' in auth) return auth
-  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
 
   const db = getAdminClient()
+  const { data: playersRaw, error: readErr } = await db.from('auction_players').select('*')
+  if (readErr) return dbError('Failed to load players', readErr)
+  const pool = nextAuctionPool((playersRaw ?? []) as AuctionPlayer[])
+  if (pool.length === 0) return { error: 'No players left to auction.' }
+
+  const pick = pool[Math.floor(Math.random() * pool.length)]
   const { data, error } = await db
     .from('auction_players')
     .update({ status: 'on_block', current_bid: null, current_bidder: null, bid_placed_at: null, hold_team: null, hold_started_at: null })
-    .eq('id', playerId)
+    .eq('id', pick.id)
     .in('status', ['pending', 'unsold'])
     .select('id')
   if (error) {
@@ -156,7 +164,7 @@ export async function putOnBlock(playerId: number): Promise<{ error?: string }> 
     if (error.code === '23505') return { error: 'Another player is already on the block.' }
     return dbError('Failed to put player on the block', error)
   }
-  if (!data?.length) return { error: 'That player cannot go on the block.' }
+  if (!data?.length) return { error: 'The pool just changed — try again.' }
   return {}
 }
 

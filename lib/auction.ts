@@ -160,6 +160,17 @@ export function validateBid(
   return { ok: true }
 }
 
+/**
+ * Pool the next random player is drawn from: everyone still pending, falling
+ * back to the unsold (skipped) players for a second round once the pending
+ * list is empty.
+ */
+export function nextAuctionPool(players: AuctionPlayer[]): AuctionPlayer[] {
+  const pending = players.filter(p => p.status === 'pending')
+  if (pending.length > 0) return pending
+  return players.filter(p => p.status === 'unsold')
+}
+
 export type AuctionPhase = 'not_ready' | 'ready' | 'live' | 'between' | 'complete'
 
 export function auctionPhase(players: AuctionPlayer[]): AuctionPhase {
