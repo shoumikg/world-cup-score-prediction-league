@@ -1,9 +1,11 @@
 // Pure auction rules — no DB access, fully unit-testable.
 //
-// Two captained teams (red & blue) bid on players from a fixed purse. The
-// roster cap is derived from the player-list size (16 players → 8 each), and a
-// reserve rule stops a team bidding itself into being unable to fill its
-// remaining slots at base price.
+// Two captained teams (red & blue) bid on players from a fixed purse. There is
+// no bid step — any integer raise of at least 1 wins the lead — and each bid
+// (re)starts a 10-second clock after which the highest bid wins automatically.
+// The roster cap is derived from the player-list size (16 players → 8 each),
+// and a reserve rule stops a team bidding itself into being unable to fill its
+// remaining slots at the minimum price.
 
 export type AuctionTeamId = 'red' | 'blue'
 export type AuctionPlayerStatus = 'pending' | 'on_block' | 'sold' | 'unsold'
@@ -16,6 +18,7 @@ export interface AuctionPlayer {
   price: number | null
   current_bid: number | null
   current_bidder: AuctionTeamId | null
+  bid_placed_at: string | null
   sold_at: string | null
   created_at: string
 }
@@ -27,8 +30,9 @@ export interface AuctionTeamRow {
   purse: number
 }
 
-export const BASE_PRICE = 10
-export const BID_INCREMENTS = [10, 20, 50] as const
+export const MIN_BID = 1
+export const BID_INCREMENTS = [5, 10, 20] as const
+export const BID_TIMEOUT_MS = 10_000
 
 export const TEAM_LABELS: Record<AuctionTeamId, string> = { red: 'Red', blue: 'Blue' }
 
@@ -64,13 +68,26 @@ export function teamStats(
 
 /**
  * The most a team may bid right now. Reserve rule: after winning this player
- * the team must still afford BASE_PRICE for every remaining slot it has to
- * fill. A full team can't bid at all (returns 0 — every valid bid is > 0).
+ * the team must still afford MIN_BID for every remaining slot it has to fill.
+ * A full team can't bid at all (returns 0 — every valid bid is > 0).
  */
 export function maxBid(stats: TeamStats): number {
   if (stats.rosterCount >= stats.cap) return 0
   const slotsAfterThis = stats.cap - stats.rosterCount - 1
-  return Math.max(0, stats.remaining - BASE_PRICE * slotsAfterThis)
+  return Math.max(0, stats.remaining - MIN_BID * slotsAfterThis)
+}
+
+/** Milliseconds until the current bid wins; null when no clock is running. */
+export function bidRemainingMs(player: AuctionPlayer, nowMs: number): number | null {
+  if (player.status !== 'on_block') return null
+  if (player.current_bid === null || player.bid_placed_at === null) return null
+  return BID_TIMEOUT_MS - (nowMs - Date.parse(player.bid_placed_at))
+}
+
+/** True once the sold-timer on the current bid has run out. */
+export function bidExpired(player: AuctionPlayer, nowMs: number): boolean {
+  const remaining = bidRemainingMs(player, nowMs)
+  return remaining !== null && remaining <= 0
 }
 
 /**
@@ -83,7 +100,8 @@ export function validateBid(
   players: AuctionPlayer[],
   teamRow: AuctionTeamRow,
   playerId: number,
-  amount: number
+  amount: number,
+  nowMs: number = Date.now()
 ): { ok: true } | { error: string } {
   if (!Number.isInteger(amount) || amount <= 0 || amount > 1_000_000)
     return { error: 'Invalid bid amount.' }
@@ -92,10 +110,13 @@ export function validateBid(
   if (!player || player.status !== 'on_block')
     return { error: 'That player is not on the block.' }
 
+  if (bidExpired(player, nowMs))
+    return { error: 'Time’s up — this sale is closing.' }
+
   if (player.current_bidder === teamRow.team)
     return { error: 'You are already the highest bidder.' }
 
-  const minBid = player.current_bid === null ? BASE_PRICE : player.current_bid + 1
+  const minBid = player.current_bid === null ? MIN_BID : player.current_bid + 1
   if (amount < minBid)
     return { error: `Bid must be at least ${minBid}.` }
 
@@ -119,8 +140,3 @@ export function auctionPhase(players: AuctionPlayer[]): AuctionPhase {
   return 'ready'
 }
 
-/** Raise options for the bid buttons: current bid (or 0) + each increment. */
-export function bidOptions(currentBid: number | null): number[] {
-  const base = currentBid ?? 0
-  return BID_INCREMENTS.map(inc => base + inc)
-}

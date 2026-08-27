@@ -2,7 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { validateBid, type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId } from '@/lib/auction'
+import { validateBid, bidExpired, type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId } from '@/lib/auction'
 
 // All auction writes go through these actions with the service-role client —
 // RLS grants the public SELECT only. Admin actions require is_admin; placeBid
@@ -123,7 +123,7 @@ export async function resetAuction(): Promise<{ error?: string }> {
   const db = getAdminClient()
   const { error } = await db
     .from('auction_players')
-    .update({ status: 'pending', team: null, price: null, current_bid: null, current_bidder: null, sold_at: null })
+    .update({ status: 'pending', team: null, price: null, current_bid: null, current_bidder: null, bid_placed_at: null, sold_at: null })
     .gte('id', 0)
   if (error) return dbError('Failed to reset auction', error)
   return {}
@@ -139,7 +139,7 @@ export async function putOnBlock(playerId: number): Promise<{ error?: string }> 
   const db = getAdminClient()
   const { data, error } = await db
     .from('auction_players')
-    .update({ status: 'on_block', current_bid: null, current_bidder: null })
+    .update({ status: 'on_block', current_bid: null, current_bidder: null, bid_placed_at: null })
     .eq('id', playerId)
     .in('status', ['pending', 'unsold'])
     .select('id')
@@ -187,7 +187,7 @@ export async function markUnsold(playerId: number): Promise<{ error?: string }> 
   const db = getAdminClient()
   const { data, error } = await db
     .from('auction_players')
-    .update({ status: 'unsold', current_bid: null, current_bidder: null })
+    .update({ status: 'unsold', current_bid: null, current_bidder: null, bid_placed_at: null })
     .eq('id', playerId)
     .eq('status', 'on_block')
     .select('id')
@@ -204,7 +204,7 @@ export async function clearAuctionBids(playerId: number): Promise<{ error?: stri
   const db = getAdminClient()
   const { data, error } = await db
     .from('auction_players')
-    .update({ current_bid: null, current_bidder: null })
+    .update({ current_bid: null, current_bidder: null, bid_placed_at: null })
     .eq('id', playerId)
     .eq('status', 'on_block')
     .select('id')
@@ -224,7 +224,7 @@ export async function undoSold(playerId: number): Promise<{ error?: string }> {
   const db = getAdminClient()
   const { data, error } = await db
     .from('auction_players')
-    .update({ status: 'on_block', team: null, price: null, sold_at: null })
+    .update({ status: 'on_block', team: null, price: null, sold_at: null, bid_placed_at: new Date().toISOString() })
     .eq('id', playerId)
     .eq('status', 'sold')
     .select('id')
@@ -254,7 +254,7 @@ export async function placeBid(playerId: number, amount: number): Promise<{ erro
   const myTeam = teams.find(t => t.captain_user_id === user.id)
   if (!myTeam) return { error: 'Only the two captains can bid.' }
 
-  const result = validateBid(players, myTeam, playerId, amount)
+  const result = validateBid(players, myTeam, playerId, amount, Date.now())
   if ('error' in result) return result
 
   // Optimistic lock: the bid only lands if the price the captain saw is still
@@ -262,7 +262,7 @@ export async function placeBid(playerId: number, amount: number): Promise<{ erro
   const player = players.find(p => p.id === playerId)!
   let query = db
     .from('auction_players')
-    .update({ current_bid: amount, current_bidder: myTeam.team })
+    .update({ current_bid: amount, current_bidder: myTeam.team, bid_placed_at: new Date().toISOString() })
     .eq('id', playerId)
     .eq('status', 'on_block')
   query = player.current_bid === null
@@ -273,4 +273,54 @@ export async function placeBid(playerId: number, amount: number): Promise<{ erro
   if (error) return dbError('Failed to place bid', error)
   if (!data?.length) return { error: 'Outbid — the price just moved. Check the new bid.' }
   return {}
+}
+
+// ── Sold-timer finalisation ───────────────────────────────────
+
+// Sells the on-block player to the highest bidder once the 10-second clock has
+// run out. Any logged-in viewer's client calls this when its countdown hits
+// zero, so the sale never depends on one particular device being awake. The
+// expiry is re-verified server-side (both timestamps come from server clocks)
+// and the write is optimistic-locked on the exact bid seen — concurrent
+// finalise calls resolve to one winner, and a bid that landed in the meantime
+// (restarting the clock) makes this a silent no-op.
+export async function finalizeExpiredBid(playerId: number): Promise<{ error?: string; sold?: boolean }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
+
+  const db = getAdminClient()
+  const { data: playerRaw } = await db
+    .from('auction_players')
+    .select('*')
+    .eq('id', playerId)
+    .single()
+  const player = playerRaw as AuctionPlayer | null
+
+  if (
+    !player ||
+    player.status !== 'on_block' ||
+    player.current_bid === null ||
+    player.current_bidder === null ||
+    !bidExpired(player, Date.now())
+  ) {
+    return { sold: false } // nothing to do — clock reset, already sold, or not expired yet
+  }
+
+  const { data, error } = await db
+    .from('auction_players')
+    .update({
+      status: 'sold',
+      team: player.current_bidder,
+      price: player.current_bid,
+      sold_at: new Date().toISOString(),
+    })
+    .eq('id', playerId)
+    .eq('status', 'on_block')
+    .eq('current_bid', player.current_bid)
+    .eq('current_bidder', player.current_bidder)
+    .select('id')
+  if (error) return dbError('Failed to close the sale', error)
+  return { sold: (data?.length ?? 0) > 0 }
 }

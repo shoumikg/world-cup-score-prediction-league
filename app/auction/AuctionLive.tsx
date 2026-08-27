@@ -3,15 +3,16 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
-  auctionPhase, bidOptions, maxBid, teamStats,
-  BASE_PRICE, TEAM_LABELS,
+  auctionPhase, bidRemainingMs, maxBid, teamStats,
+  MIN_BID, BID_INCREMENTS, TEAM_LABELS,
   type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId, type TeamStats,
 } from '@/lib/auction'
 import {
-  placeBid, putOnBlock, hammerSold, markUnsold, clearAuctionBids, undoSold,
+  placeBid, putOnBlock, hammerSold, markUnsold, clearAuctionBids, undoSold, finalizeExpiredBid,
 } from './actions'
 
 const POLL_MS = 3000
+const POLL_TIMED_MS = 1500 // faster while a sold-timer is running
 const STALE_MS = 15000
 
 const TEAM_STYLES: Record<AuctionTeamId, { card: string; chip: string; text: string; solid: string }> = {
@@ -24,16 +25,20 @@ interface Props {
   initialTeams: AuctionTeamRow[]
   isAdmin: boolean
   captainOf: AuctionTeamId | null
+  isLoggedIn: boolean
 }
 
-export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf }: Props) {
+export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, isLoggedIn }: Props) {
   const [players, setPlayers] = useState(initialPlayers)
   const [teams, setTeams] = useState(initialTeams)
   const [stale, setStale] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const [stagedText, setStagedText] = useState('')
+  const [nowMs, setNowMs] = useState(0) // 0 until mounted — avoids SSR/client clock mismatch
   const [isPending, startTransition] = useTransition()
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null)
   const lastOkRef = useRef(Date.now())
+  const lastFinalizeRef = useRef(0)
 
   const refetch = useCallback(async () => {
     if (!supabaseRef.current) supabaseRef.current = createClient()
@@ -52,18 +57,46 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf }
     }
   }, [])
 
+  const phase = auctionPhase(players)
+  const onBlock = players.find(p => p.status === 'on_block') ?? null
+  const hasTimedBid = !!(onBlock && onBlock.current_bid !== null && onBlock.bid_placed_at)
+
+  // Poll — faster while the sold-timer is running, paused when the tab is hidden.
   useEffect(() => {
     const tick = () => { if (!document.hidden) refetch() }
-    const id = setInterval(tick, POLL_MS)
+    const id = setInterval(tick, hasTimedBid ? POLL_TIMED_MS : POLL_MS)
     document.addEventListener('visibilitychange', tick)
     return () => {
       clearInterval(id)
       document.removeEventListener('visibilitychange', tick)
     }
-  }, [refetch])
+  }, [refetch, hasTimedBid])
 
-  // Runs a server action, then refreshes immediately so the actor sees the
-  // result without waiting for the next poll.
+  // Local clock for the countdown (only ticks while a timed bid is live).
+  useEffect(() => {
+    setNowMs(Date.now())
+    if (!hasTimedBid) return
+    const id = setInterval(() => setNowMs(Date.now()), 250)
+    return () => clearInterval(id)
+  }, [hasTimedBid])
+
+  const remainingMs = onBlock && nowMs > 0 ? bidRemainingMs(onBlock, nowMs) : null
+  const expired = remainingMs !== null && remainingMs <= 0
+
+  // When the countdown runs out, any logged-in viewer's client closes the sale.
+  // The server re-verifies expiry and optimistic-locks the write, so early or
+  // duplicate calls are harmless no-ops.
+  useEffect(() => {
+    if (!isLoggedIn || !onBlock || !expired) return
+    if (Date.now() - lastFinalizeRef.current < 1500) return
+    lastFinalizeRef.current = Date.now()
+    finalizeExpiredBid(onBlock.id).then(() => refetch()).catch(() => {})
+  }, [isLoggedIn, onBlock, expired, nowMs, refetch])
+
+  // Reset the staged bid whenever a different player comes up.
+  const onBlockId = onBlock?.id
+  useEffect(() => { setStagedText(''); setMsg(null) }, [onBlockId])
+
   function run(action: () => Promise<{ error?: string }>) {
     setMsg(null)
     startTransition(async () => {
@@ -73,8 +106,16 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf }
     })
   }
 
-  const phase = auctionPhase(players)
-  const onBlock = players.find(p => p.status === 'on_block') ?? null
+  function submitBid(playerId: number, amount: number) {
+    setMsg(null)
+    startTransition(async () => {
+      const res = await placeBid(playerId, amount)
+      if (res.error) setMsg(res.error)
+      else setStagedText('')
+      await refetch()
+    })
+  }
+
   const queue = players.filter(p => p.status === 'pending')
   const unsoldList = players.filter(p => p.status === 'unsold')
   const soldList = players
@@ -83,6 +124,8 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf }
   const statsByTeam = new Map<AuctionTeamId, TeamStats>(
     teams.map(t => [t.team, teamStats(players, t)])
   )
+
+  const secondsLeft = remainingMs === null ? null : Math.max(0, Math.ceil(remainingMs / 1000))
 
   const phaseChip =
     phase === 'live' ? (
@@ -107,7 +150,7 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf }
         </div>
       </div>
       <p className="text-sm text-gray-500 mb-5">
-        {TEAM_LABELS.red} vs {TEAM_LABELS.blue} · live player auction
+        {TEAM_LABELS.red} vs {TEAM_LABELS.blue} · live player auction · highest bid wins after a 10-second clock
         {captainOf && <span className="ml-2 font-semibold text-gray-700">— you captain {TEAM_LABELS[captainOf]}</span>}
       </p>
 
@@ -164,50 +207,100 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf }
                 <p className="text-xs uppercase tracking-wide text-gray-400 mb-1">On the block</p>
                 <p className="text-2xl font-bold mb-2">{onBlock.name}</p>
                 {onBlock.current_bid !== null && onBlock.current_bidder ? (
-                  <p className="mb-1">
+                  <div className="mb-1">
                     <span className={`text-xs font-semibold px-2 py-0.5 rounded ${TEAM_STYLES[onBlock.current_bidder].chip}`}>
                       {TEAM_LABELS[onBlock.current_bidder]}
                     </span>
                     <span className="text-3xl font-bold ml-2 tabular-nums">{onBlock.current_bid}</span>
-                  </p>
+                    {secondsLeft !== null && (
+                      <div className="mt-2">
+                        {expired ? (
+                          <span className="text-sm font-bold text-gray-500 animate-pulse">🔨 Selling…</span>
+                        ) : (
+                          <span className={`inline-block text-sm font-bold tabular-nums px-2.5 py-0.5 rounded-full ${
+                            secondsLeft <= 3 ? 'bg-red-100 text-red-600 animate-pulse' : 'bg-gray-100 text-gray-600'
+                          }`}>
+                            ⏱ {secondsLeft}s
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 ) : (
-                  <p className="text-sm text-gray-500 mb-1">No bids yet · opening bid {BASE_PRICE}</p>
+                  <p className="text-sm text-gray-500 mb-1">No bids yet · minimum bid {MIN_BID} · first bid starts the 10s clock</p>
                 )}
 
-                {/* Captain bidding */}
+                {/* Captain bidding — stage an amount, then confirm */}
                 {captainOf && (() => {
                   const myStats = statsByTeam.get(captainOf)!
                   const cap = maxBid(myStats)
                   const leading = onBlock.current_bidder === captainOf
-                  const options = bidOptions(onBlock.current_bid).filter(a => a <= cap)
+                  const current = onBlock.current_bid ?? 0
+                  const staged = /^\d+$/.test(stagedText.trim()) ? parseInt(stagedText.trim(), 10) : null
+                  const stagedProblem =
+                    staged === null ? null
+                    : staged <= current && onBlock.current_bid !== null ? `Must beat the current bid of ${current}.`
+                    : staged < MIN_BID ? `Minimum bid is ${MIN_BID}.`
+                    : staged > cap ? `Your max bid is ${cap}.`
+                    : null
+                  const canConfirm = staged !== null && stagedProblem === null && !expired && !isPending
                   return (
                     <div className="mt-4 pt-4 border-t">
                       {leading ? (
                         <p className="text-sm font-semibold text-green-600">You’re the highest bidder ✓</p>
                       ) : myStats.rosterCount >= myStats.cap ? (
                         <p className="text-sm text-gray-400">Your squad is full — no more bids.</p>
-                      ) : options.length === 0 ? (
+                      ) : cap < Math.max(current + 1, MIN_BID) ? (
                         <p className="text-sm text-gray-400">You can’t afford to raise (max bid {cap}).</p>
                       ) : (
-                        <div className="flex items-center justify-center gap-2 flex-wrap">
-                          {options.map(amount => (
+                        <>
+                          <div className="flex items-center justify-center gap-2 flex-wrap mb-2">
+                            {BID_INCREMENTS.map(inc => (
+                              <button
+                                key={inc}
+                                onClick={() => setStagedText(String((staged !== null && staged > current ? staged : current) + inc))}
+                                disabled={isPending || expired}
+                                className="text-sm font-semibold border px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-40"
+                              >
+                                +{inc}
+                              </button>
+                            ))}
+                            <input
+                              type="number" inputMode="numeric" min={MIN_BID} max={cap}
+                              value={stagedText}
+                              onChange={e => setStagedText(e.target.value)}
+                              placeholder="Amount"
+                              disabled={isPending || expired}
+                              className="w-24 border rounded-lg px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-green-400"
+                            />
+                          </div>
+                          <div className="flex items-center justify-center gap-2 flex-wrap">
                             <button
-                              key={amount}
-                              onClick={() => run(() => placeBid(onBlock.id, amount))}
-                              disabled={isPending}
-                              className={`text-white text-sm font-bold px-4 py-2 rounded-lg transition-colors disabled:opacity-50 ${TEAM_STYLES[captainOf].solid}`}
+                              onClick={() => staged !== null && submitBid(onBlock.id, staged)}
+                              disabled={!canConfirm}
+                              className={`text-white text-sm font-bold px-5 py-2 rounded-lg transition-colors disabled:opacity-40 ${TEAM_STYLES[captainOf].solid}`}
                             >
-                              Bid {amount}
+                              {expired ? 'Selling…' : staged !== null ? `Place bid ${staged}` : 'Place bid'}
                             </button>
-                          ))}
-                        </div>
+                            {stagedText && (
+                              <button
+                                onClick={() => setStagedText('')}
+                                disabled={isPending}
+                                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                              >
+                                clear
+                              </button>
+                            )}
+                          </div>
+                          {stagedProblem && <p className="text-xs text-red-500 mt-2">{stagedProblem}</p>}
+                        </>
                       )}
                       <p className="text-xs text-gray-400 mt-2">Your max bid: {cap}</p>
                     </div>
                   )
                 })()}
 
-                {/* Auctioneer hammer */}
+                {/* Auctioneer backstop controls */}
                 {isAdmin && (
                   <div className="mt-4 pt-4 border-t flex items-center justify-center gap-2 flex-wrap">
                     <button
@@ -215,8 +308,8 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf }
                       disabled={isPending || onBlock.current_bid === null}
                       className="text-sm font-bold bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded transition-colors disabled:opacity-40"
                     >
-                      🔨 Sold{onBlock.current_bid !== null && onBlock.current_bidder
-                        ? ` to ${TEAM_LABELS[onBlock.current_bidder]} for ${onBlock.current_bid}`
+                      🔨 Sold now{onBlock.current_bid !== null && onBlock.current_bidder
+                        ? ` — ${TEAM_LABELS[onBlock.current_bidder]} ${onBlock.current_bid}`
                         : ''}
                     </button>
                     <button

@@ -38,6 +38,7 @@ export default async function AuctionPage() {
       initialTeams={teams}
       isAdmin={isAdmin}
       captainOf={captainOf}
+      isLoggedIn={!!user}
     />
   )
 }
