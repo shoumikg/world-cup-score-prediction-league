@@ -3,9 +3,11 @@
 // Two captained teams (red & blue) bid on players from a fixed purse. There is
 // no bid step — any integer raise of at least 1 wins the lead — and each bid
 // (re)starts a 10-second clock after which the highest bid wins automatically.
-// The roster cap is derived from the player-list size (16 players → 8 each),
-// and a reserve rule stops a team bidding itself into being unable to fill its
-// remaining slots at the minimum price.
+// Each captain also has a 10-minute hold budget: an active hold freezes the
+// clock while burning the holder's budget (released by toggle, their next bid,
+// or exhaustion). The roster cap is derived from the player-list size (16
+// players → 8 each), and a reserve rule stops a team bidding itself into being
+// unable to fill its remaining slots at the minimum price.
 
 export type AuctionTeamId = 'red' | 'blue'
 export type AuctionPlayerStatus = 'pending' | 'on_block' | 'sold' | 'unsold'
@@ -19,6 +21,8 @@ export interface AuctionPlayer {
   current_bid: number | null
   current_bidder: AuctionTeamId | null
   bid_placed_at: string | null
+  hold_team: AuctionTeamId | null
+  hold_started_at: string | null
   sold_at: string | null
   created_at: string
 }
@@ -28,11 +32,13 @@ export interface AuctionTeamRow {
   captain_user_id: string | null
   captain_name: string | null
   purse: number
+  hold_used_ms: number
 }
 
 export const MIN_BID = 1
 export const BID_INCREMENTS = [5, 10, 20] as const
 export const BID_TIMEOUT_MS = 10_000
+export const HOLD_BUDGET_MS = 10 * 60_000
 
 export const TEAM_LABELS: Record<AuctionTeamId, string> = { red: 'Red', blue: 'Blue' }
 
@@ -77,11 +83,35 @@ export function maxBid(stats: TeamStats): number {
   return Math.max(0, stats.remaining - MIN_BID * slotsAfterThis)
 }
 
-/** Milliseconds until the current bid wins; null when no clock is running. */
+/**
+ * Milliseconds until the current bid wins; null when no clock is running.
+ * While a hold is active the elapsed time freezes at the moment the hold
+ * began (a bid placed during a hold starts fully frozen at 10s).
+ */
 export function bidRemainingMs(player: AuctionPlayer, nowMs: number): number | null {
   if (player.status !== 'on_block') return null
   if (player.current_bid === null || player.bid_placed_at === null) return null
-  return BID_TIMEOUT_MS - (nowMs - Date.parse(player.bid_placed_at))
+  const placedMs = Date.parse(player.bid_placed_at)
+  const elapsed = player.hold_started_at !== null
+    ? Math.max(0, Date.parse(player.hold_started_at) - placedMs)
+    : nowMs - placedMs
+  return BID_TIMEOUT_MS - elapsed
+}
+
+/**
+ * A team's unspent hold budget, net of the hold it is running right now.
+ * Never negative — an over-running active hold reads as 0 (release due).
+ */
+export function holdRemainingMs(
+  teamRow: AuctionTeamRow,
+  onBlock: AuctionPlayer | null,
+  nowMs: number
+): number {
+  const activeSpan =
+    onBlock && onBlock.hold_team === teamRow.team && onBlock.hold_started_at !== null
+      ? Math.max(0, nowMs - Date.parse(onBlock.hold_started_at))
+      : 0
+  return Math.max(0, HOLD_BUDGET_MS - teamRow.hold_used_ms - activeSpan)
 }
 
 /** True once the sold-timer on the current bid has run out. */

@@ -3,13 +3,21 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
-  auctionPhase, bidRemainingMs, maxBid, teamStats,
+  auctionPhase, bidRemainingMs, holdRemainingMs, maxBid, teamStats,
   MIN_BID, BID_INCREMENTS, TEAM_LABELS,
   type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId, type TeamStats,
 } from '@/lib/auction'
 import {
-  placeBid, putOnBlock, hammerSold, markUnsold, clearAuctionBids, undoSold, finalizeExpiredBid,
+  placeBid, putOnBlock, hammerSold, markUnsold, clearAuctionBids, undoSold,
+  finalizeExpiredBid, toggleHold, releaseExhaustedHold,
 } from './actions'
+
+function fmtMins(ms: number): string {
+  const totalSec = Math.max(0, Math.floor(ms / 1000))
+  const m = Math.floor(totalSec / 60)
+  const sec = totalSec % 60
+  return `${m}:${sec.toString().padStart(2, '0')}`
+}
 
 const POLL_MS = 3000
 const POLL_TIMED_MS = 1500 // faster while a sold-timer is running
@@ -39,6 +47,7 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null)
   const lastOkRef = useRef(Date.now())
   const lastFinalizeRef = useRef(0)
+  const lastHoldReleaseRef = useRef(0)
 
   const refetch = useCallback(async () => {
     if (!supabaseRef.current) supabaseRef.current = createClient()
@@ -82,6 +91,11 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
 
   const remainingMs = onBlock && nowMs > 0 ? bidRemainingMs(onBlock, nowMs) : null
   const expired = remainingMs !== null && remainingMs <= 0
+  const holdingTeam = onBlock?.hold_team ?? null
+  const holdingTeamRow = holdingTeam ? teams.find(t => t.team === holdingTeam) ?? null : null
+  const holdBudgetLeft = holdingTeamRow && onBlock && nowMs > 0
+    ? holdRemainingMs(holdingTeamRow, onBlock, nowMs)
+    : null
 
   // When the countdown runs out, any logged-in viewer's client closes the sale.
   // The server re-verifies expiry and optimistic-locks the write, so early or
@@ -92,6 +106,16 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
     lastFinalizeRef.current = Date.now()
     finalizeExpiredBid(onBlock.id).then(() => refetch()).catch(() => {})
   }, [isLoggedIn, onBlock, expired, nowMs, refetch])
+
+  // Likewise for a hold whose budget has run out — the server re-verifies
+  // exhaustion, so early or duplicate calls can't cut a hold short.
+  useEffect(() => {
+    if (!isLoggedIn || !onBlock || holdingTeam === null) return
+    if (holdBudgetLeft === null || holdBudgetLeft > 0) return
+    if (Date.now() - lastHoldReleaseRef.current < 1500) return
+    lastHoldReleaseRef.current = Date.now()
+    releaseExhaustedHold(onBlock.id).then(() => refetch()).catch(() => {})
+  }, [isLoggedIn, onBlock, holdingTeam, holdBudgetLeft, nowMs, refetch])
 
   // Reset the staged bid whenever a different player comes up.
   const onBlockId = onBlock?.id
@@ -150,7 +174,7 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
         </div>
       </div>
       <p className="text-sm text-gray-500 mb-5">
-        {TEAM_LABELS.red} vs {TEAM_LABELS.blue} · live player auction · highest bid wins after a 10-second clock
+        {TEAM_LABELS.red} vs {TEAM_LABELS.blue} · live player auction · highest bid wins after a 10-second clock · captains can pause it with 10 minutes of hold time
         {captainOf && <span className="ml-2 font-semibold text-gray-700">— you captain {TEAM_LABELS[captainOf]}</span>}
       </p>
 
@@ -184,6 +208,11 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
                     <p className="text-sm mb-2">
                       <span className="font-bold text-gray-900">{s.remaining}</span>
                       <span className="text-xs text-gray-500"> / {s.purse} purse left</span>
+                      {nowMs > 0 && (
+                        <span className="text-xs text-gray-500 ml-2">
+                          · ⏸ {fmtMins(holdRemainingMs(t, onBlock, nowMs))} hold left
+                        </span>
+                      )}
                     </p>
                     {roster.length > 0 && (
                       <ul className="text-xs text-gray-700 space-y-0.5">
@@ -214,7 +243,14 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
                     <span className="text-3xl font-bold ml-2 tabular-nums">{onBlock.current_bid}</span>
                     {secondsLeft !== null && (
                       <div className="mt-2">
-                        {expired ? (
+                        {holdingTeam ? (
+                          <span className="inline-flex items-center gap-1.5 text-sm font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                            ⏸ {secondsLeft}s — {TEAM_LABELS[holdingTeam]} holding
+                            {holdBudgetLeft !== null && (
+                              <span className="text-xs font-semibold text-amber-600">({fmtMins(holdBudgetLeft)} left)</span>
+                            )}
+                          </span>
+                        ) : expired ? (
                           <span className="text-sm font-bold text-gray-500 animate-pulse">🔨 Selling…</span>
                         ) : (
                           <span className={`inline-block text-sm font-bold tabular-nums px-2.5 py-0.5 rounded-full ${
@@ -233,6 +269,11 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
                 {/* Captain bidding — stage an amount, then confirm */}
                 {captainOf && (() => {
                   const myStats = statsByTeam.get(captainOf)!
+                  const myTeamRow = teams.find(t => t.team === captainOf)!
+                  const myHoldLeft = nowMs > 0 ? holdRemainingMs(myTeamRow, onBlock, nowMs) : 0
+                  const iHold = holdingTeam === captainOf
+                  const canStartHold =
+                    holdingTeam === null && onBlock.current_bid !== null && !expired && myHoldLeft >= 1000
                   const cap = maxBid(myStats)
                   const leading = onBlock.current_bidder === captainOf
                   const current = onBlock.current_bid ?? 0
@@ -246,6 +287,33 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
                   const canConfirm = staged !== null && stagedProblem === null && !expired && !isPending
                   return (
                     <div className="mt-4 pt-4 border-t">
+                      {/* Hold — freezes the sold-clock on this captain's own time budget */}
+                      {(iHold || onBlock.current_bid !== null) && (
+                        <div className="mb-3">
+                          <button
+                            onClick={() => run(() => toggleHold(onBlock.id))}
+                            disabled={isPending || (!iHold && !canStartHold)}
+                            title={
+                              iHold ? 'Resume the clock — stops using your hold time'
+                              : holdingTeam ? `${TEAM_LABELS[holdingTeam]} is holding`
+                              : myHoldLeft < 1000 ? 'No hold time left'
+                              : 'Pause the clock while you think — uses your hold time'
+                            }
+                            className={`text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors disabled:opacity-40 ${
+                              iHold
+                                ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                                : 'border border-amber-300 text-amber-700 hover:bg-amber-50'
+                            }`}
+                          >
+                            {iHold ? '▶ Resume clock' : `⏸ Hold (${fmtMins(myHoldLeft)} left)`}
+                          </button>
+                          {iHold && (
+                            <p className="text-xs text-amber-600 mt-1">
+                              Clock paused — your hold time is running. Bidding also resumes the clock.
+                            </p>
+                          )}
+                        </div>
+                      )}
                       {leading ? (
                         <p className="text-sm font-semibold text-green-600">You’re the highest bidder ✓</p>
                       ) : myStats.rosterCount >= myStats.cap ? (

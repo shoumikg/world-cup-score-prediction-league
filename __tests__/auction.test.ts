@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   rosterCap, teamStats, maxBid, validateBid, auctionPhase, bidRemainingMs, bidExpired,
-  MIN_BID, BID_TIMEOUT_MS,
+  holdRemainingMs, MIN_BID, BID_TIMEOUT_MS, HOLD_BUDGET_MS,
   type AuctionPlayer, type AuctionTeamRow, type AuctionPlayerStatus, type AuctionTeamId,
 } from '../lib/auction'
 
@@ -13,6 +13,8 @@ function player(opts: {
   bid?: number
   bidder?: AuctionTeamId
   placedAt?: string
+  holdTeam?: AuctionTeamId
+  holdStartedAt?: string
 } = {}): AuctionPlayer {
   return {
     id: nextId++,
@@ -23,6 +25,8 @@ function player(opts: {
     current_bid: opts.bid ?? null,
     current_bidder: opts.bidder ?? null,
     bid_placed_at: opts.placedAt ?? (opts.bid !== undefined ? '2026-07-01T12:00:00Z' : null),
+    hold_team: opts.holdTeam ?? null,
+    hold_started_at: opts.holdStartedAt ?? null,
     sold_at: null,
     created_at: '2026-07-01T00:00:00Z',
   }
@@ -31,8 +35,8 @@ function player(opts: {
 // A "now" safely inside the 10s window of the default placedAt above.
 const NOW = Date.parse('2026-07-01T12:00:05Z')
 
-function teamRow(team: AuctionTeamId, purse = 1000): AuctionTeamRow {
-  return { team, captain_user_id: `${team}-captain`, captain_name: `${team} cap`, purse }
+function teamRow(team: AuctionTeamId, purse = 1000, holdUsedMs = 0): AuctionTeamRow {
+  return { team, captain_user_id: `${team}-captain`, captain_name: `${team} cap`, purse, hold_used_ms: holdUsedMs }
 }
 
 /** 16-player pool: n sold to red at `priceEach`, one on the block, rest pending. */
@@ -151,6 +155,49 @@ describe('sold-timer', () => {
     expect(bidExpired(player({ status: 'on_block' }), at(99_000))).toBe(false)
     const sold = player({ status: 'sold', team: 'red', price: 50, bid: 50, bidder: 'red', placedAt: placed })
     expect(bidRemainingMs(sold, at(99_000))).toBeNull()
+  })
+})
+
+describe('hold', () => {
+  const placed = '2026-07-01T12:00:00Z'
+  const at = (offsetMs: number) => Date.parse(placed) + offsetMs
+
+  it('freezes the clock at the moment the hold began', () => {
+    const p = player({
+      status: 'on_block', bid: 50, bidder: 'red', placedAt: placed,
+      holdTeam: 'blue', holdStartedAt: '2026-07-01T12:00:04Z',
+    })
+    // Elapsed froze at 4s → 6s left, no matter how much later we look.
+    expect(bidRemainingMs(p, at(8_000))).toBe(6_000)
+    expect(bidRemainingMs(p, at(500_000))).toBe(6_000)
+    expect(bidExpired(p, at(500_000))).toBe(false)
+  })
+
+  it('a bid placed during a hold starts fully frozen at 10s', () => {
+    const p = player({
+      status: 'on_block', bid: 60, bidder: 'red', placedAt: '2026-07-01T12:00:06Z',
+      holdTeam: 'blue', holdStartedAt: placed, // hold predates the bid
+    })
+    expect(bidRemainingMs(p, at(60_000))).toBe(BID_TIMEOUT_MS)
+  })
+
+  it('still accepts bids while the clock is frozen past its normal expiry', () => {
+    const players = pool(0, 0, { bid: 50, bidder: 'blue', holdTeam: 'blue', holdStartedAt: '2026-07-01T12:00:09Z' })
+    const blockId = players.find(p => p.status === 'on_block')!.id
+    expect(validateBid(players, teamRow('red'), blockId, 51, at(120_000))).toEqual({ ok: true })
+  })
+
+  it('tracks the remaining budget net of the running hold', () => {
+    const p = player({
+      status: 'on_block', bid: 50, bidder: 'red', placedAt: placed,
+      holdTeam: 'blue', holdStartedAt: placed,
+    })
+    const blue = teamRow('blue', 1000, 60_000) // 1 min already used
+    expect(holdRemainingMs(blue, p, at(30_000))).toBe(HOLD_BUDGET_MS - 60_000 - 30_000)
+    // Red is not holding — its budget doesn't drain.
+    expect(holdRemainingMs(teamRow('red'), p, at(30_000))).toBe(HOLD_BUDGET_MS)
+    // Never negative once overrun.
+    expect(holdRemainingMs(blue, p, at(HOLD_BUDGET_MS))).toBe(0)
   })
 })
 

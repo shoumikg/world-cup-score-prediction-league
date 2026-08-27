@@ -2,7 +2,10 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { getAdminClient } from '@/lib/supabase/admin'
-import { validateBid, bidExpired, type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId } from '@/lib/auction'
+import {
+  validateBid, bidExpired, holdRemainingMs, HOLD_BUDGET_MS, TEAM_LABELS,
+  type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId,
+} from '@/lib/auction'
 
 // All auction writes go through these actions with the service-role client —
 // RLS grants the public SELECT only. Admin actions require is_admin; placeBid
@@ -123,9 +126,14 @@ export async function resetAuction(): Promise<{ error?: string }> {
   const db = getAdminClient()
   const { error } = await db
     .from('auction_players')
-    .update({ status: 'pending', team: null, price: null, current_bid: null, current_bidder: null, bid_placed_at: null, sold_at: null })
+    .update({ status: 'pending', team: null, price: null, current_bid: null, current_bidder: null, bid_placed_at: null, hold_team: null, hold_started_at: null, sold_at: null })
     .gte('id', 0)
   if (error) return dbError('Failed to reset auction', error)
+  const { error: holdErr } = await db
+    .from('auction_teams')
+    .update({ hold_used_ms: 0 })
+    .in('team', [...TEAM_IDS])
+  if (holdErr) return dbError('Failed to reset hold budgets', holdErr)
   return {}
 }
 
@@ -139,7 +147,7 @@ export async function putOnBlock(playerId: number): Promise<{ error?: string }> 
   const db = getAdminClient()
   const { data, error } = await db
     .from('auction_players')
-    .update({ status: 'on_block', current_bid: null, current_bidder: null, bid_placed_at: null })
+    .update({ status: 'on_block', current_bid: null, current_bidder: null, bid_placed_at: null, hold_team: null, hold_started_at: null })
     .eq('id', playerId)
     .in('status', ['pending', 'unsold'])
     .select('id')
@@ -168,7 +176,7 @@ export async function hammerSold(
   const db = getAdminClient()
   const { data, error } = await db
     .from('auction_players')
-    .update({ status: 'sold', team: seenBidder, price: seenBid, sold_at: new Date().toISOString() })
+    .update({ status: 'sold', team: seenBidder, price: seenBid, sold_at: new Date().toISOString(), hold_team: null, hold_started_at: null })
     .eq('id', playerId)
     .eq('status', 'on_block')
     .eq('current_bid', seenBid)
@@ -187,7 +195,7 @@ export async function markUnsold(playerId: number): Promise<{ error?: string }> 
   const db = getAdminClient()
   const { data, error } = await db
     .from('auction_players')
-    .update({ status: 'unsold', current_bid: null, current_bidder: null, bid_placed_at: null })
+    .update({ status: 'unsold', current_bid: null, current_bidder: null, bid_placed_at: null, hold_team: null, hold_started_at: null })
     .eq('id', playerId)
     .eq('status', 'on_block')
     .select('id')
@@ -204,7 +212,7 @@ export async function clearAuctionBids(playerId: number): Promise<{ error?: stri
   const db = getAdminClient()
   const { data, error } = await db
     .from('auction_players')
-    .update({ current_bid: null, current_bidder: null, bid_placed_at: null })
+    .update({ current_bid: null, current_bidder: null, bid_placed_at: null, hold_team: null, hold_started_at: null })
     .eq('id', playerId)
     .eq('status', 'on_block')
     .select('id')
@@ -224,7 +232,7 @@ export async function undoSold(playerId: number): Promise<{ error?: string }> {
   const db = getAdminClient()
   const { data, error } = await db
     .from('auction_players')
-    .update({ status: 'on_block', team: null, price: null, sold_at: null, bid_placed_at: new Date().toISOString() })
+    .update({ status: 'on_block', team: null, price: null, sold_at: null, bid_placed_at: new Date().toISOString(), hold_team: null, hold_started_at: null })
     .eq('id', playerId)
     .eq('status', 'sold')
     .select('id')
@@ -258,20 +266,46 @@ export async function placeBid(playerId: number, amount: number): Promise<{ erro
   if ('error' in result) return result
 
   // Optimistic lock: the bid only lands if the price the captain saw is still
-  // the current price. Simultaneous bids resolve to exactly one winner.
+  // the current price. Simultaneous bids resolve to exactly one winner. A bid
+  // also releases the captain's own hold (an opponent's hold stays active and
+  // keeps the fresh clock frozen).
   const player = players.find(p => p.id === playerId)!
+  const releasesOwnHold = player.hold_team === myTeam.team && player.hold_started_at !== null
+  const update: Record<string, number | string | null> = {
+    current_bid: amount,
+    current_bidder: myTeam.team,
+    bid_placed_at: new Date().toISOString(),
+  }
+  if (releasesOwnHold) {
+    update.hold_team = null
+    update.hold_started_at = null
+  }
   let query = db
     .from('auction_players')
-    .update({ current_bid: amount, current_bidder: myTeam.team, bid_placed_at: new Date().toISOString() })
+    .update(update)
     .eq('id', playerId)
     .eq('status', 'on_block')
   query = player.current_bid === null
     ? query.is('current_bid', null)
     : query.eq('current_bid', player.current_bid)
+  // When clearing a hold, also lock on it so we can never wipe a hold that
+  // changed hands between our read and this write.
+  if (releasesOwnHold) query = query.eq('hold_team', myTeam.team)
 
   const { data, error } = await query.select('id')
   if (error) return dbError('Failed to place bid', error)
   if (!data?.length) return { error: 'Outbid — the price just moved. Check the new bid.' }
+
+  // Charge the released hold (best-effort: a failure here grants free hold
+  // time rather than ever blocking a live bid).
+  if (releasesOwnHold) {
+    const span = Math.max(0, Date.now() - Date.parse(player.hold_started_at!))
+    const charge = Math.min(span, Math.max(0, HOLD_BUDGET_MS - myTeam.hold_used_ms))
+    await db
+      .from('auction_teams')
+      .update({ hold_used_ms: myTeam.hold_used_ms + charge })
+      .eq('team', myTeam.team)
+  }
   return {}
 }
 
@@ -315,6 +349,8 @@ export async function finalizeExpiredBid(playerId: number): Promise<{ error?: st
       team: player.current_bidder,
       price: player.current_bid,
       sold_at: new Date().toISOString(),
+      hold_team: null,
+      hold_started_at: null,
     })
     .eq('id', playerId)
     .eq('status', 'on_block')
@@ -323,4 +359,130 @@ export async function finalizeExpiredBid(playerId: number): Promise<{ error?: st
     .select('id')
   if (error) return dbError('Failed to close the sale', error)
   return { sold: (data?.length ?? 0) > 0 }
+}
+
+// ── Captain hold time ─────────────────────────────────────────
+
+// Ends the active hold on `player` (held by `teamRow`), charging the budget
+// and shifting the bid clock forward by exactly the time it was frozen. The
+// pause is clamped at the budget boundary: time held beyond exhaustion counts
+// against the bid clock, never as free pause. Optimistic-locked on the hold's
+// start timestamp so concurrent releases resolve to one.
+async function endHold(
+  db: ReturnType<typeof getAdminClient>,
+  player: AuctionPlayer,
+  teamRow: AuctionTeamRow,
+  endMs: number
+): Promise<{ error?: string; released?: boolean }> {
+  const holdStartMs = Date.parse(player.hold_started_at!)
+  const budgetLeft = Math.max(0, HOLD_BUDGET_MS - teamRow.hold_used_ms)
+  const effectiveEndMs = Math.min(endMs, holdStartMs + budgetLeft)
+  const charge = Math.max(0, Math.min(endMs - holdStartMs, budgetLeft))
+
+  const update: Record<string, string | null> = { hold_team: null, hold_started_at: null }
+  if (player.bid_placed_at !== null) {
+    const placedMs = Date.parse(player.bid_placed_at)
+    const shift = Math.max(0, effectiveEndMs - Math.max(holdStartMs, placedMs))
+    update.bid_placed_at = new Date(placedMs + shift).toISOString()
+  }
+
+  const { data, error } = await db
+    .from('auction_players')
+    .update(update)
+    .eq('id', player.id)
+    .eq('status', 'on_block')
+    .eq('hold_team', teamRow.team)
+    .eq('hold_started_at', player.hold_started_at!)
+    .select('id')
+  if (error) return dbError('Failed to release the hold', error)
+  if (!data?.length) return { released: false } // already released or superseded
+
+  // Charge after the release lands (a failure grants free hold time rather
+  // than double-charging a retried release).
+  const { error: chargeErr } = await db
+    .from('auction_teams')
+    .update({ hold_used_ms: teamRow.hold_used_ms + charge })
+    .eq('team', teamRow.team)
+  if (chargeErr) return dbError('Failed to record hold time', chargeErr)
+  return { released: true }
+}
+
+// Captain's Hold button: starts a hold (freezing the sold-clock on their
+// budget) or releases their own active hold.
+export async function toggleHold(playerId: number): Promise<{ error?: string; holding?: boolean }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
+
+  const db = getAdminClient()
+  const [{ data: teamsRaw }, { data: playerRaw }] = await Promise.all([
+    db.from('auction_teams').select('*'),
+    db.from('auction_players').select('*').eq('id', playerId).single(),
+  ])
+  const teams = (teamsRaw ?? []) as AuctionTeamRow[]
+  const player = playerRaw as AuctionPlayer | null
+
+  const myTeam = teams.find(t => t.captain_user_id === user.id)
+  if (!myTeam) return { error: 'Only the two captains can hold.' }
+  if (!player || player.status !== 'on_block') return { error: 'That player is not on the block.' }
+
+  const now = Date.now()
+
+  // Release my own hold.
+  if (player.hold_team === myTeam.team) {
+    const res = await endHold(db, player, myTeam, now)
+    if (res.error) return { error: res.error }
+    return { holding: false }
+  }
+
+  if (player.hold_team !== null)
+    return { error: `${TEAM_LABELS[player.hold_team]} is already holding.` }
+
+  // Start a hold.
+  if (player.current_bid === null)
+    return { error: 'No clock to hold yet — it starts with the first bid.' }
+  if (bidExpired(player, now))
+    return { error: 'Time’s up — this sale is closing.' }
+  if (holdRemainingMs(myTeam, player, now) < 1000)
+    return { error: 'No hold time left.' }
+
+  const { data, error } = await db
+    .from('auction_players')
+    .update({ hold_team: myTeam.team, hold_started_at: new Date().toISOString() })
+    .eq('id', playerId)
+    .eq('status', 'on_block')
+    .is('hold_team', null)
+    .eq('current_bid', player.current_bid)
+    .select('id')
+  if (error) return dbError('Failed to start the hold', error)
+  if (!data?.length) return { error: 'The state just changed — check the block and try again.' }
+  return { holding: true }
+}
+
+// Releases a hold whose budget has run out. Any logged-in viewer's client
+// calls this; the server re-verifies exhaustion, so it cannot end a hold
+// early, and endHold's clamping means overrun never becomes free pause.
+export async function releaseExhaustedHold(playerId: number): Promise<{ error?: string; released?: boolean }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
+
+  const db = getAdminClient()
+  const [{ data: teamsRaw }, { data: playerRaw }] = await Promise.all([
+    db.from('auction_teams').select('*'),
+    db.from('auction_players').select('*').eq('id', playerId).single(),
+  ])
+  const teams = (teamsRaw ?? []) as AuctionTeamRow[]
+  const player = playerRaw as AuctionPlayer | null
+
+  if (!player || player.status !== 'on_block' || player.hold_team === null)
+    return { released: false }
+  const holdingTeam = teams.find(t => t.team === player.hold_team)
+  if (!holdingTeam) return { released: false }
+  if (holdRemainingMs(holdingTeam, player, Date.now()) > 0)
+    return { released: false } // not exhausted yet
+
+  return endHold(db, player, holdingTeam, Date.now())
 }
