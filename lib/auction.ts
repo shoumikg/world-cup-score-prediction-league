@@ -27,6 +27,20 @@ export interface AuctionPlayer {
   created_at: string
 }
 
+export type AuctionEventType =
+  | 'on_block' | 'bid' | 'bid_set' | 'hold_start' | 'hold_end' | 'hold_exhausted'
+  | 'sold' | 'unsold' | 'undo' | 'back_to_pool' | 'clear_bids'
+  | 'clock_stopped' | 'clock_restarted'
+
+export interface AuctionEvent {
+  id: number
+  created_at: string
+  type: AuctionEventType
+  player_name: string | null
+  team: AuctionTeamId | null
+  amount: number | null
+}
+
 export interface AuctionTeamRow {
   team: AuctionTeamId
   captain_user_id: string | null

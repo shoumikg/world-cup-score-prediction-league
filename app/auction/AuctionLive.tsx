@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   auctionPhase, bidRemainingMs, holdRemainingMs, maxBid, teamStats,
   MIN_BID, BID_INCREMENTS, TEAM_LABELS,
-  type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId, type TeamStats,
+  type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId, type TeamStats, type AuctionEvent,
 } from '@/lib/auction'
 import {
   placeBid, putRandomOnBlock, putSpecificOnBlock, hammerSold, markUnsold, clearAuctionBids,
@@ -20,6 +20,46 @@ function fmtMins(ms: number): string {
   return `${m}:${sec.toString().padStart(2, '0')}`
 }
 
+function TeamChip({ team }: { team: AuctionTeamId }) {
+  return (
+    <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${TEAM_STYLES[team].chip}`}>
+      {TEAM_LABELS[team]}
+    </span>
+  )
+}
+
+function feedLine(e: AuctionEvent) {
+  const name = <span className="font-medium">{e.player_name}</span>
+  switch (e.type) {
+    case 'on_block':
+      return <>🎲 {name} is on the block!</>
+    case 'bid':
+      return <>{e.team && <TeamChip team={e.team} />} bids <span className="font-semibold tabular-nums">{e.amount}</span> on {name}</>
+    case 'bid_set':
+      return <>🔧 Auctioneer sets the bid — {e.team && <TeamChip team={e.team} />} <span className="font-semibold tabular-nums">{e.amount}</span> on {name}</>
+    case 'hold_start':
+      return <>⏸ {e.team && <TeamChip team={e.team} />} holds — clock paused</>
+    case 'hold_end':
+      return <>▶ {e.team && <TeamChip team={e.team} />} releases the hold</>
+    case 'hold_exhausted':
+      return <>⌛ {e.team && <TeamChip team={e.team} />} is out of hold time — clock resumes</>
+    case 'sold':
+      return <>🔨 <span className="text-green-700">SOLD</span> — {name} to {e.team && <TeamChip team={e.team} />} for <span className="tabular-nums">{e.amount}</span>!</>
+    case 'unsold':
+      return <>❌ {name} goes unsold</>
+    case 'undo':
+      return <>↩️ Sale of {name} undone</>
+    case 'back_to_pool':
+      return <>↩️ {name} returns to the pool</>
+    case 'clear_bids':
+      return <>🧹 Bids on {name} cleared</>
+    case 'clock_stopped':
+      return <>⏸ Auctioneer stops the clock</>
+    case 'clock_restarted':
+      return <>⏱ Fresh 10 seconds on the clock</>
+  }
+}
+
 const POLL_MS = 3000
 const POLL_TIMED_MS = 1500 // faster while a sold-timer is running
 const STALE_MS = 15000
@@ -32,14 +72,16 @@ const TEAM_STYLES: Record<AuctionTeamId, { card: string; chip: string; text: str
 interface Props {
   initialPlayers: AuctionPlayer[]
   initialTeams: AuctionTeamRow[]
+  initialEvents: AuctionEvent[]
   isAdmin: boolean
   captainOf: AuctionTeamId | null
   isLoggedIn: boolean
 }
 
-export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, isLoggedIn }: Props) {
+export function AuctionLive({ initialPlayers, initialTeams, initialEvents, isAdmin, captainOf, isLoggedIn }: Props) {
   const [players, setPlayers] = useState(initialPlayers)
   const [teams, setTeams] = useState(initialTeams)
+  const [events, setEvents] = useState(initialEvents)
   const [stale, setStale] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [stagedText, setStagedText] = useState('')
@@ -55,12 +97,14 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
   const refetch = useCallback(async () => {
     if (!supabaseRef.current) supabaseRef.current = createClient()
     const supabase = supabaseRef.current
-    const [{ data: p, error: pe }, { data: t, error: te }] = await Promise.all([
+    const [{ data: p, error: pe }, { data: t, error: te }, { data: ev }] = await Promise.all([
       supabase.from('auction_players').select('*').order('id'),
       supabase.from('auction_teams').select('*'),
+      supabase.from('auction_events').select('*').order('id', { ascending: false }).limit(50),
     ])
     if (!pe && p) setPlayers(p as AuctionPlayer[])
     if (!te && t) setTeams(t as AuctionTeamRow[])
+    if (ev) setEvents(ev as AuctionEvent[])
     if (!pe && !te) {
       lastOkRef.current = Date.now()
       setStale(false)
@@ -545,6 +589,25 @@ export function AuctionLive({ initialPlayers, initialTeams, isAdmin, captainOf, 
 
             {msg && <p className="text-xs text-red-500 mt-3">{msg}</p>}
           </div>
+
+          {/* Live feed */}
+          {events.length > 0 && (
+            <div className="bg-white rounded-xl border shadow-sm mb-6">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-4 pt-3 pb-1">
+                Live feed
+              </h3>
+              <ul className="divide-y max-h-72 overflow-y-auto px-4 pb-2">
+                {events.map(e => (
+                  <li key={e.id} className={`flex items-baseline gap-2 py-1.5 text-sm ${e.type === 'sold' ? 'font-semibold' : ''}`}>
+                    <span className="text-[10px] text-gray-400 tabular-nums shrink-0 w-14">
+                      {nowMs > 0 ? new Date(e.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }) : ''}
+                    </span>
+                    <span className="min-w-0">{feedLine(e)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Still to come */}
           {queue.length > 0 && (

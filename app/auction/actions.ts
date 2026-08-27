@@ -5,7 +5,7 @@ import { getAdminClient } from '@/lib/supabase/admin'
 import {
   validateBid, bidExpired, holdRemainingMs, nextAuctionPool, teamStats, maxBid,
   HOLD_BUDGET_MS, TEAM_LABELS,
-  type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId,
+  type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId, type AuctionEventType,
 } from '@/lib/auction'
 
 // All auction writes go through these actions with the service-role client —
@@ -26,6 +26,21 @@ function dbError(prefix: string, error: { code?: string; message?: string }): { 
   if (error.code === '42501')
     return { error: `${prefix}: blocked by row-level security — SUPABASE_SERVICE_ROLE_KEY is not the service_role key.` }
   return { error: `${prefix}: ${error.message || 'unknown error'}` }
+}
+
+// Best-effort feed entry — called only after the guarded state write landed,
+// and never allowed to fail the action itself.
+async function logEvent(
+  db: ReturnType<typeof getAdminClient>,
+  type: AuctionEventType,
+  fields: { playerName?: string | null; team?: AuctionTeamId | null; amount?: number | null } = {}
+): Promise<void> {
+  await db.from('auction_events').insert({
+    type,
+    player_name: fields.playerName ?? null,
+    team: fields.team ?? null,
+    amount: fields.amount ?? null,
+  })
 }
 
 async function requireAdmin(): Promise<{ error: string } | { ok: true }> {
@@ -135,6 +150,7 @@ export async function resetAuction(): Promise<{ error?: string }> {
     .update({ hold_used_ms: 0 })
     .in('team', [...TEAM_IDS])
   if (holdErr) return dbError('Failed to reset hold budgets', holdErr)
+  await db.from('auction_events').delete().gte('id', 0)
   return {}
 }
 
@@ -166,6 +182,7 @@ export async function putRandomOnBlock(): Promise<{ error?: string }> {
     return dbError('Failed to put player on the block', error)
   }
   if (!data?.length) return { error: 'The pool just changed — try again.' }
+  await logEvent(db, 'on_block', { playerName: pick.name })
   return {}
 }
 
@@ -182,12 +199,13 @@ export async function putSpecificOnBlock(playerId: number): Promise<{ error?: st
     .update({ status: 'on_block', current_bid: null, current_bidder: null, bid_placed_at: null, hold_team: null, hold_started_at: null })
     .eq('id', playerId)
     .in('status', ['pending', 'unsold'])
-    .select('id')
+    .select('id, name')
   if (error) {
     if (error.code === '23505') return { error: 'Another player is already on the block.' }
     return dbError('Failed to put player on the block', error)
   }
   if (!data?.length) return { error: 'That player cannot go on the block.' }
+  await logEvent(db, 'on_block', { playerName: (data[0] as { name: string }).name })
   return {}
 }
 
@@ -204,9 +222,10 @@ export async function returnToPool(playerId: number): Promise<{ error?: string }
     .update({ status: 'pending', current_bid: null, current_bidder: null, bid_placed_at: null, hold_team: null, hold_started_at: null })
     .eq('id', playerId)
     .eq('status', 'on_block')
-    .select('id')
+    .select('id, name')
   if (error) return dbError('Failed to return player to the pool', error)
   if (!data?.length) return { error: 'That player is not on the block.' }
+  await logEvent(db, 'back_to_pool', { playerName: (data[0] as { name: string }).name })
   return {}
 }
 
@@ -253,6 +272,7 @@ export async function stopClock(playerId: number): Promise<{ error?: string }> {
     .eq('id', playerId)
     .eq('status', 'on_block')
   if (error) return dbError('Failed to stop the clock', error)
+  await logEvent(db, 'clock_stopped', { playerName: loaded.player.name })
   return {}
 }
 
@@ -273,6 +293,7 @@ export async function restartClock(playerId: number): Promise<{ error?: string }
     .eq('id', playerId)
     .eq('status', 'on_block')
   if (error) return dbError('Failed to restart the clock', error)
+  await logEvent(db, 'clock_restarted', { playerName: loaded.player.name })
   return {}
 }
 
@@ -330,6 +351,7 @@ export async function adminSetBid(
     .select('id')
   if (error) return dbError('Failed to set the bid', error)
   if (!data?.length) return { error: 'The state just changed — try again.' }
+  await logEvent(db, 'bid_set', { playerName: player.name, team, amount })
   return {}
 }
 
@@ -353,6 +375,7 @@ export async function forceReleaseHold(playerId: number): Promise<{ error?: stri
 
   const res = await endHold(db, player, teamRow, Date.now())
   if (res.error) return { error: res.error }
+  if (res.released) await logEvent(db, 'hold_end', { playerName: player.name, team: teamRow.team })
   return {}
 }
 
@@ -395,9 +418,10 @@ export async function hammerSold(
     .eq('status', 'on_block')
     .eq('current_bid', seenBid)
     .eq('current_bidder', seenBidder)
-    .select('id')
+    .select('id, name')
   if (error) return dbError('Failed to record the sale', error)
   if (!data?.length) return { error: 'The bid changed just now — check the price and hammer again.' }
+  await logEvent(db, 'sold', { playerName: (data[0] as { name: string }).name, team: seenBidder, amount: seenBid })
   return {}
 }
 
@@ -412,9 +436,10 @@ export async function markUnsold(playerId: number): Promise<{ error?: string }> 
     .update({ status: 'unsold', current_bid: null, current_bidder: null, bid_placed_at: null, hold_team: null, hold_started_at: null })
     .eq('id', playerId)
     .eq('status', 'on_block')
-    .select('id')
+    .select('id, name')
   if (error) return dbError('Failed to mark unsold', error)
   if (!data?.length) return { error: 'That player is not on the block.' }
+  await logEvent(db, 'unsold', { playerName: (data[0] as { name: string }).name })
   return {}
 }
 
@@ -429,9 +454,10 @@ export async function clearAuctionBids(playerId: number): Promise<{ error?: stri
     .update({ current_bid: null, current_bidder: null, bid_placed_at: null, hold_team: null, hold_started_at: null })
     .eq('id', playerId)
     .eq('status', 'on_block')
-    .select('id')
+    .select('id, name')
   if (error) return dbError('Failed to clear bids', error)
   if (!data?.length) return { error: 'That player is not on the block.' }
+  await logEvent(db, 'clear_bids', { playerName: (data[0] as { name: string }).name })
   return {}
 }
 
@@ -449,12 +475,13 @@ export async function undoSold(playerId: number): Promise<{ error?: string }> {
     .update({ status: 'on_block', team: null, price: null, sold_at: null, bid_placed_at: null, hold_team: null, hold_started_at: null })
     .eq('id', playerId)
     .eq('status', 'sold')
-    .select('id')
+    .select('id, name')
   if (error) {
     if (error.code === '23505') return { error: 'Another player is on the block — finish them first.' }
     return dbError('Failed to undo the sale', error)
   }
   if (!data?.length) return { error: 'That player is not sold.' }
+  await logEvent(db, 'undo', { playerName: (data[0] as { name: string }).name })
   return {}
 }
 
@@ -509,6 +536,7 @@ export async function placeBid(playerId: number, amount: number): Promise<{ erro
   const { data, error } = await query.select('id')
   if (error) return dbError('Failed to place bid', error)
   if (!data?.length) return { error: 'Outbid — the price just moved. Check the new bid.' }
+  await logEvent(db, 'bid', { playerName: player.name, team: myTeam.team, amount })
 
   // Charge the released hold (best-effort: a failure here grants free hold
   // time rather than ever blocking a live bid).
@@ -572,7 +600,9 @@ export async function finalizeExpiredBid(playerId: number): Promise<{ error?: st
     .eq('current_bidder', player.current_bidder)
     .select('id')
   if (error) return dbError('Failed to close the sale', error)
-  return { sold: (data?.length ?? 0) > 0 }
+  const sold = (data?.length ?? 0) > 0
+  if (sold) await logEvent(db, 'sold', { playerName: player.name, team: player.current_bidder, amount: player.current_bid })
+  return { sold }
 }
 
 // ── Captain hold time ─────────────────────────────────────────
@@ -647,6 +677,7 @@ export async function toggleHold(playerId: number): Promise<{ error?: string; ho
   if (player.hold_team === myTeam.team) {
     const res = await endHold(db, player, myTeam, now)
     if (res.error) return { error: res.error }
+    if (res.released) await logEvent(db, 'hold_end', { playerName: player.name, team: myTeam.team })
     return { holding: false }
   }
 
@@ -673,6 +704,7 @@ export async function toggleHold(playerId: number): Promise<{ error?: string; ho
     .select('id')
   if (error) return dbError('Failed to start the hold', error)
   if (!data?.length) return { error: 'The state just changed — check the block and try again.' }
+  await logEvent(db, 'hold_start', { playerName: player.name, team: myTeam.team })
   return { holding: true }
 }
 
@@ -700,5 +732,7 @@ export async function releaseExhaustedHold(playerId: number): Promise<{ error?: 
   if (holdRemainingMs(holdingTeam, player, Date.now()) > 0)
     return { released: false } // not exhausted yet
 
-  return endHold(db, player, holdingTeam, Date.now())
+  const res = await endHold(db, player, holdingTeam, Date.now())
+  if (res.released) await logEvent(db, 'hold_exhausted', { playerName: player.name, team: holdingTeam.team })
+  return res
 }
