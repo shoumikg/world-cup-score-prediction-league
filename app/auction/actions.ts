@@ -14,6 +14,16 @@ function isTeamId(v: unknown): v is AuctionTeamId {
   return v === 'red' || v === 'blue'
 }
 
+// Surface the underlying Supabase error — generic messages made real setup
+// problems (wrong service key, stale schema cache) undiagnosable from the UI.
+function dbError(prefix: string, error: { code?: string; message?: string }): { error: string } {
+  if (error.code === 'PGRST205' || error.code === 'PGRST002')
+    return { error: `${prefix}: Supabase hasn't picked up the auction tables yet — run NOTIFY pgrst, 'reload schema'; in the SQL editor.` }
+  if (error.code === '42501')
+    return { error: `${prefix}: blocked by row-level security — SUPABASE_SERVICE_ROLE_KEY is not the service_role key.` }
+  return { error: `${prefix}: ${error.message || 'unknown error'}` }
+}
+
 async function requireAdmin(): Promise<{ error: string } | { ok: true }> {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -42,7 +52,7 @@ export async function addAuctionPlayer(rawName: string): Promise<{ error?: strin
     return { error: 'That player is already on the list.' }
 
   const { error } = await db.from('auction_players').insert({ name })
-  if (error) return { error: 'Failed to add player.' }
+  if (error) return dbError('Failed to add player', error)
   return {}
 }
 
@@ -58,7 +68,7 @@ export async function deleteAuctionPlayer(playerId: number): Promise<{ error?: s
     .eq('id', playerId)
     .eq('status', 'pending')  // only removable before being auctioned
     .select('id')
-  if (error) return { error: 'Failed to remove player.' }
+  if (error) return dbError('Failed to remove player', error)
   if (!data?.length) return { error: 'Only players still pending can be removed.' }
   return {}
 }
@@ -90,7 +100,7 @@ export async function setAuctionCaptain(team: string, userId: string): Promise<{
     .from('auction_teams')
     .update({ captain_user_id: userId, captain_name: profile.display_name })
     .eq('team', team)
-  if (error) return { error: 'Failed to set captain.' }
+  if (error) return dbError('Failed to set captain', error)
   return {}
 }
 
@@ -102,7 +112,7 @@ export async function setAuctionPurse(amount: number): Promise<{ error?: string 
 
   const db = getAdminClient()
   const { error } = await db.from('auction_teams').update({ purse: amount }).in('team', [...TEAM_IDS])
-  if (error) return { error: 'Failed to set purse.' }
+  if (error) return dbError('Failed to set purse', error)
   return {}
 }
 
@@ -115,7 +125,7 @@ export async function resetAuction(): Promise<{ error?: string }> {
     .from('auction_players')
     .update({ status: 'pending', team: null, price: null, current_bid: null, current_bidder: null, sold_at: null })
     .gte('id', 0)
-  if (error) return { error: 'Failed to reset auction.' }
+  if (error) return dbError('Failed to reset auction', error)
   return {}
 }
 
@@ -136,7 +146,7 @@ export async function putOnBlock(playerId: number): Promise<{ error?: string }> 
   if (error) {
     // Unique partial index: only one player on the block at a time.
     if (error.code === '23505') return { error: 'Another player is already on the block.' }
-    return { error: 'Failed to put player on the block.' }
+    return dbError('Failed to put player on the block', error)
   }
   if (!data?.length) return { error: 'That player cannot go on the block.' }
   return {}
@@ -164,7 +174,7 @@ export async function hammerSold(
     .eq('current_bid', seenBid)
     .eq('current_bidder', seenBidder)
     .select('id')
-  if (error) return { error: 'Failed to record the sale.' }
+  if (error) return dbError('Failed to record the sale', error)
   if (!data?.length) return { error: 'The bid changed just now — check the price and hammer again.' }
   return {}
 }
@@ -181,7 +191,7 @@ export async function markUnsold(playerId: number): Promise<{ error?: string }> 
     .eq('id', playerId)
     .eq('status', 'on_block')
     .select('id')
-  if (error) return { error: 'Failed to mark unsold.' }
+  if (error) return dbError('Failed to mark unsold', error)
   if (!data?.length) return { error: 'That player is not on the block.' }
   return {}
 }
@@ -198,7 +208,7 @@ export async function clearAuctionBids(playerId: number): Promise<{ error?: stri
     .eq('id', playerId)
     .eq('status', 'on_block')
     .select('id')
-  if (error) return { error: 'Failed to clear bids.' }
+  if (error) return dbError('Failed to clear bids', error)
   if (!data?.length) return { error: 'That player is not on the block.' }
   return {}
 }
@@ -220,7 +230,7 @@ export async function undoSold(playerId: number): Promise<{ error?: string }> {
     .select('id')
   if (error) {
     if (error.code === '23505') return { error: 'Another player is on the block — finish them first.' }
-    return { error: 'Failed to undo the sale.' }
+    return dbError('Failed to undo the sale', error)
   }
   if (!data?.length) return { error: 'That player is not sold.' }
   return {}
@@ -260,7 +270,7 @@ export async function placeBid(playerId: number, amount: number): Promise<{ erro
     : query.eq('current_bid', player.current_bid)
 
   const { data, error } = await query.select('id')
-  if (error) return { error: 'Failed to place bid. Try again.' }
+  if (error) return dbError('Failed to place bid', error)
   if (!data?.length) return { error: 'Outbid — the price just moved. Check the new bid.' }
   return {}
 }
