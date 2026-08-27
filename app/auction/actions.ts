@@ -1,0 +1,266 @@
+'use server'
+
+import { createClient } from '@/lib/supabase/server'
+import { getAdminClient } from '@/lib/supabase/admin'
+import { validateBid, type AuctionPlayer, type AuctionTeamRow, type AuctionTeamId } from '@/lib/auction'
+
+// All auction writes go through these actions with the service-role client —
+// RLS grants the public SELECT only. Admin actions require is_admin; placeBid
+// requires being one of the two captains.
+
+const TEAM_IDS = ['red', 'blue'] as const
+
+function isTeamId(v: unknown): v is AuctionTeamId {
+  return v === 'red' || v === 'blue'
+}
+
+async function requireAdmin(): Promise<{ error: string } | { ok: true }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', user.id)
+    .single()
+  if (!profile?.is_admin) return { error: 'Unauthorized.' }
+  return { ok: true }
+}
+
+// ── Setup (admin) ─────────────────────────────────────────────
+
+export async function addAuctionPlayer(rawName: string): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+
+  const name = (rawName ?? '').trim()
+  if (name.length < 1 || name.length > 60) return { error: 'Name must be 1–60 characters.' }
+
+  const db = getAdminClient()
+  const { data: existing } = await db.from('auction_players').select('id, name')
+  if ((existing ?? []).some(p => p.name.toLowerCase() === name.toLowerCase()))
+    return { error: 'That player is already on the list.' }
+
+  const { error } = await db.from('auction_players').insert({ name })
+  if (error) return { error: 'Failed to add player.' }
+  return {}
+}
+
+export async function deleteAuctionPlayer(playerId: number): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
+
+  const db = getAdminClient()
+  const { data, error } = await db
+    .from('auction_players')
+    .delete()
+    .eq('id', playerId)
+    .eq('status', 'pending')  // only removable before being auctioned
+    .select('id')
+  if (error) return { error: 'Failed to remove player.' }
+  if (!data?.length) return { error: 'Only players still pending can be removed.' }
+  return {}
+}
+
+export async function setAuctionCaptain(team: string, userId: string): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!isTeamId(team)) return { error: 'Invalid team.' }
+  if (typeof userId !== 'string' || !userId) return { error: 'Invalid user.' }
+
+  const db = getAdminClient()
+  const { data: profile } = await db
+    .from('profiles')
+    .select('id, display_name')
+    .eq('id', userId)
+    .single()
+  if (!profile) return { error: 'User not found.' }
+
+  const other = TEAM_IDS.find(t => t !== team)!
+  const { data: otherRow } = await db
+    .from('auction_teams')
+    .select('captain_user_id')
+    .eq('team', other)
+    .single()
+  if (otherRow?.captain_user_id === userId)
+    return { error: 'That user already captains the other team.' }
+
+  const { error } = await db
+    .from('auction_teams')
+    .update({ captain_user_id: userId, captain_name: profile.display_name })
+    .eq('team', team)
+  if (error) return { error: 'Failed to set captain.' }
+  return {}
+}
+
+export async function setAuctionPurse(amount: number): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!Number.isInteger(amount) || amount < 0 || amount > 1_000_000)
+    return { error: 'Enter a valid purse.' }
+
+  const db = getAdminClient()
+  const { error } = await db.from('auction_teams').update({ purse: amount }).in('team', [...TEAM_IDS])
+  if (error) return { error: 'Failed to set purse.' }
+  return {}
+}
+
+export async function resetAuction(): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+
+  const db = getAdminClient()
+  const { error } = await db
+    .from('auction_players')
+    .update({ status: 'pending', team: null, price: null, current_bid: null, current_bidder: null, sold_at: null })
+    .gte('id', 0)
+  if (error) return { error: 'Failed to reset auction.' }
+  return {}
+}
+
+// ── Auctioneer flow (admin) ───────────────────────────────────
+
+export async function putOnBlock(playerId: number): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
+
+  const db = getAdminClient()
+  const { data, error } = await db
+    .from('auction_players')
+    .update({ status: 'on_block', current_bid: null, current_bidder: null })
+    .eq('id', playerId)
+    .in('status', ['pending', 'unsold'])
+    .select('id')
+  if (error) {
+    // Unique partial index: only one player on the block at a time.
+    if (error.code === '23505') return { error: 'Another player is already on the block.' }
+    return { error: 'Failed to put player on the block.' }
+  }
+  if (!data?.length) return { error: 'That player cannot go on the block.' }
+  return {}
+}
+
+// Hammer: optimistic-locked on the exact bid the admin saw, so a bid landing
+// at the same moment makes the hammer miss (0 rows) instead of selling at a
+// stale price.
+export async function hammerSold(
+  playerId: number,
+  seenBid: number,
+  seenBidder: string
+): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!Number.isInteger(playerId) || !Number.isInteger(seenBid) || !isTeamId(seenBidder))
+    return { error: 'Invalid sale.' }
+
+  const db = getAdminClient()
+  const { data, error } = await db
+    .from('auction_players')
+    .update({ status: 'sold', team: seenBidder, price: seenBid, sold_at: new Date().toISOString() })
+    .eq('id', playerId)
+    .eq('status', 'on_block')
+    .eq('current_bid', seenBid)
+    .eq('current_bidder', seenBidder)
+    .select('id')
+  if (error) return { error: 'Failed to record the sale.' }
+  if (!data?.length) return { error: 'The bid changed just now — check the price and hammer again.' }
+  return {}
+}
+
+export async function markUnsold(playerId: number): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
+
+  const db = getAdminClient()
+  const { data, error } = await db
+    .from('auction_players')
+    .update({ status: 'unsold', current_bid: null, current_bidder: null })
+    .eq('id', playerId)
+    .eq('status', 'on_block')
+    .select('id')
+  if (error) return { error: 'Failed to mark unsold.' }
+  if (!data?.length) return { error: 'That player is not on the block.' }
+  return {}
+}
+
+export async function clearAuctionBids(playerId: number): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
+
+  const db = getAdminClient()
+  const { data, error } = await db
+    .from('auction_players')
+    .update({ current_bid: null, current_bidder: null })
+    .eq('id', playerId)
+    .eq('status', 'on_block')
+    .select('id')
+  if (error) return { error: 'Failed to clear bids.' }
+  if (!data?.length) return { error: 'That player is not on the block.' }
+  return {}
+}
+
+// Puts a mistakenly-sold player back on the block with the winning bid still
+// standing (their price returns to the buying team automatically — purses are
+// derived from sold rows, never stored).
+export async function undoSold(playerId: number): Promise<{ error?: string }> {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth
+  if (!Number.isInteger(playerId)) return { error: 'Invalid player.' }
+
+  const db = getAdminClient()
+  const { data, error } = await db
+    .from('auction_players')
+    .update({ status: 'on_block', team: null, price: null, sold_at: null })
+    .eq('id', playerId)
+    .eq('status', 'sold')
+    .select('id')
+  if (error) {
+    if (error.code === '23505') return { error: 'Another player is on the block — finish them first.' }
+    return { error: 'Failed to undo the sale.' }
+  }
+  if (!data?.length) return { error: 'That player is not sold.' }
+  return {}
+}
+
+// ── Bidding (captains) ────────────────────────────────────────
+
+export async function placeBid(playerId: number, amount: number): Promise<{ error?: string }> {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: 'Not logged in.' }
+
+  const db = getAdminClient()
+  const [{ data: teamsRaw }, { data: playersRaw }] = await Promise.all([
+    db.from('auction_teams').select('*'),
+    db.from('auction_players').select('*'),
+  ])
+  const teams = (teamsRaw ?? []) as AuctionTeamRow[]
+  const players = (playersRaw ?? []) as AuctionPlayer[]
+
+  const myTeam = teams.find(t => t.captain_user_id === user.id)
+  if (!myTeam) return { error: 'Only the two captains can bid.' }
+
+  const result = validateBid(players, myTeam, playerId, amount)
+  if ('error' in result) return result
+
+  // Optimistic lock: the bid only lands if the price the captain saw is still
+  // the current price. Simultaneous bids resolve to exactly one winner.
+  const player = players.find(p => p.id === playerId)!
+  let query = db
+    .from('auction_players')
+    .update({ current_bid: amount, current_bidder: myTeam.team })
+    .eq('id', playerId)
+    .eq('status', 'on_block')
+  query = player.current_bid === null
+    ? query.is('current_bid', null)
+    : query.eq('current_bid', player.current_bid)
+
+  const { data, error } = await query.select('id')
+  if (error) return { error: 'Failed to place bid. Try again.' }
+  if (!data?.length) return { error: 'Outbid — the price just moved. Check the new bid.' }
+  return {}
+}

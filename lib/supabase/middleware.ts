@@ -33,8 +33,11 @@ export async function updateSession(request: NextRequest) {
   // route stays behind the auth wall by default unless added here with its
   // own auth story. Both endpoints do their own CRON_SECRET Bearer check.
   const isPublicApi = ['/api/sync-scores', '/api/backfill-events'].includes(request.nextUrl.pathname)
+  // The auction is publicly watchable — spectators need no account. Reads are
+  // RLS-limited to SELECT; every write still authenticates in its server action.
+  const isPublicPage = request.nextUrl.pathname === '/auction'
 
-  if (!user && !isAuthPath && !isPublicApi) {
+  if (!user && !isAuthPath && !isPublicApi && !isPublicPage) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
