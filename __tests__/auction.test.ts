@@ -32,7 +32,7 @@ function player(opts: {
   }
 }
 
-// A "now" safely inside the 10s window of the default placedAt above.
+// A "now" safely inside the bid-timeout window of the default placedAt above.
 const NOW = Date.parse('2026-07-01T12:00:05Z')
 
 function teamRow(team: AuctionTeamId, purse = 1000, holdUsedMs = 0): AuctionTeamRow {
@@ -95,7 +95,7 @@ describe('validateBid', () => {
     expect(validateBid(players, red, blockId(players), 50, NOW)).toHaveProperty('error')
   })
 
-  it('rejects a bid after the 10-second clock has run out', () => {
+  it('rejects a bid after the sold-clock has run out', () => {
     const players = pool(0, 0, { bid: 50, bidder: 'blue' })
     const after = Date.parse('2026-07-01T12:00:00Z') + BID_TIMEOUT_MS + 1
     const r = validateBid(players, red, blockId(players), 60, after)
@@ -145,7 +145,7 @@ describe('sold-timer', () => {
 
   it('counts down from the bid timestamp', () => {
     const p = player({ status: 'on_block', bid: 50, bidder: 'red', placedAt: placed })
-    expect(bidRemainingMs(p, at(4_000))).toBe(6_000)
+    expect(bidRemainingMs(p, at(4_000))).toBe(BID_TIMEOUT_MS - 4_000)
     expect(bidExpired(p, at(4_000))).toBe(false)
     expect(bidExpired(p, at(BID_TIMEOUT_MS))).toBe(true)
   })
@@ -167,13 +167,13 @@ describe('hold', () => {
       status: 'on_block', bid: 50, bidder: 'red', placedAt: placed,
       holdTeam: 'blue', holdStartedAt: '2026-07-01T12:00:04Z',
     })
-    // Elapsed froze at 4s → 6s left, no matter how much later we look.
-    expect(bidRemainingMs(p, at(8_000))).toBe(6_000)
-    expect(bidRemainingMs(p, at(500_000))).toBe(6_000)
+    // Elapsed froze at 4s, no matter how much later we look.
+    expect(bidRemainingMs(p, at(8_000))).toBe(BID_TIMEOUT_MS - 4_000)
+    expect(bidRemainingMs(p, at(500_000))).toBe(BID_TIMEOUT_MS - 4_000)
     expect(bidExpired(p, at(500_000))).toBe(false)
   })
 
-  it('a bid placed during a hold starts fully frozen at 10s', () => {
+  it('a bid placed during a hold starts fully frozen at the full timeout', () => {
     const p = player({
       status: 'on_block', bid: 60, bidder: 'red', placedAt: '2026-07-01T12:00:06Z',
       holdTeam: 'blue', holdStartedAt: placed, // hold predates the bid

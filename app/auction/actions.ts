@@ -158,7 +158,7 @@ export async function resetAuction(): Promise<{ error?: string }> {
 
 // Draws a random player from the remaining pool (pending first, then unsold
 // for a second round) and puts them on the block with no clock running — the
-// first bid starts the 10-second timer.
+// first bid starts the 30-second timer.
 export async function putRandomOnBlock(): Promise<{ error?: string }> {
   const auth = await requireAdmin()
   if ('error' in auth) return auth
@@ -256,7 +256,7 @@ async function loadBlockReleasingHold(
 }
 
 // Manual override: stop the sold-clock entirely (no captain budget involved).
-// The current bid stands; any new bid — or Restart clock — starts a fresh 10s.
+// The current bid stands; any new bid — or Restart clock — starts a fresh clock.
 export async function stopClock(playerId: number): Promise<{ error?: string }> {
   const auth = await requireAdmin()
   if ('error' in auth) return auth
@@ -277,7 +277,7 @@ export async function stopClock(playerId: number): Promise<{ error?: string }> {
   return {}
 }
 
-// Manual override: (re)start a fresh 10-second clock on the standing bid.
+// Manual override: (re)start a fresh 30-second clock on the standing bid.
 export async function restartClock(playerId: number): Promise<{ error?: string }> {
   const auth = await requireAdmin()
   if ('error' in auth) return auth
@@ -300,7 +300,7 @@ export async function restartClock(playerId: number): Promise<{ error?: string }
 
 // Manual override: set the current bid outright (fix a fat-fingered amount or
 // wrong team). Validated against the team's reserve-rule cap so the override
-// can never create an unpayable price; restarts a fresh 10-second clock.
+// can never create an unpayable price; restarts a fresh 30-second clock.
 export async function adminSetBid(
   playerId: number,
   team: string,
@@ -555,7 +555,7 @@ export async function placeBid(playerId: number, amount: number): Promise<{ erro
 
 // ── Sold-timer finalisation ───────────────────────────────────
 
-// Sells the on-block player to the highest bidder once the 10-second clock has
+// Sells the on-block player to the highest bidder once the 30-second clock has
 // run out. Any logged-in viewer's client calls this when its countdown hits
 // zero, so the sale never depends on one particular device being awake. The
 // expiry is re-verified server-side (both timestamps come from server clocks)
@@ -602,7 +602,7 @@ export async function finalizeExpiredBid(playerId: number): Promise<{ error?: st
     .eq('current_bid', player.current_bid)
     .eq('current_bidder', player.current_bidder)
     // Lock on the exact clock we verified as expired — an admin Stop clock /
-    // Fresh 10s landing mid-flight makes this a 0-row miss, not a sale.
+    // fresh-clock landing mid-flight makes this a 0-row miss, not a sale.
     .eq('bid_placed_at', player.bid_placed_at!)
     .select('id')
   if (error) return dbError('Failed to close the sale', error)
