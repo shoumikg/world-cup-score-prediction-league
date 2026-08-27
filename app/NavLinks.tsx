@@ -36,6 +36,7 @@ export function NavLinks({ isAdmin, hasLive, unseenCount }: Props) {
       <Link href="/bonus" className={cls('/bonus')}>Bonus</Link>
       <Link href="/bracket" className={cls('/bracket')}>Knockout Bracket</Link>
       <Link href="/compare" className={cls('/compare')}>Compare</Link>
+      <Link href="/auction" className={cls('/auction')}>Auction</Link>
       <Link href="/whats-new" className={`${cls('/whats-new')} inline-flex items-center gap-1`}>
         What&rsquo;s New
         {unseenCount > 0 && (

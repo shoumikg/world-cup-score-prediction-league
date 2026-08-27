@@ -11,7 +11,9 @@ import { AdminKnockoutForm } from './AdminKnockoutForm'
 import { AdminKickoffForm } from './AdminKickoffForm'
 import { AdminKnockoutAutofill } from './AdminKnockoutAutofill'
 import { AdminMatchEventsForm } from './AdminMatchEventsForm'
+import { AdminAuctionSetup } from './AdminAuctionSetup'
 import type { Match, MatchEvent } from '@/lib/types'
+import type { AuctionPlayer, AuctionTeamRow } from '@/lib/auction'
 import type { OFPlayer } from '@/lib/openfootball'
 
 export const dynamic = 'force-dynamic'
@@ -33,14 +35,27 @@ export default async function AdminPage() {
     { data: matches },
     { data: events },
     squads,
+    { data: auctionPlayersRaw },
+    { data: auctionTeamsRaw },
+    { data: profilesRaw },
   ] = await Promise.all([
     supabase.from('matches').select('*').order('kickoff_utc'),
     supabase.from('match_events').select('*'),
     fetchSquads().catch(() => null),
+    supabase.from('auction_players').select('*').order('id'),
+    supabase.from('auction_teams').select('*'),
+    supabase.from('profiles').select('id, display_name, is_admin'),
   ])
 
   const all = (matches ?? []) as Match[]
   const eventList = (events ?? []) as MatchEvent[]
+  const auctionPlayers = (auctionPlayersRaw ?? []) as AuctionPlayer[]
+  const auctionTeams = (auctionTeamsRaw ?? []) as AuctionTeamRow[]
+  // Captains are players from the league — any registered non-admin account.
+  const captainOptions = ((profilesRaw ?? []) as { id: string; display_name: string; is_admin: boolean | null }[])
+    .filter(p => !p.is_admin)
+    .map(p => ({ id: p.id, display_name: p.display_name }))
+    .sort((a, b) => a.display_name.localeCompare(b.display_name))
 
   // Map from DB team name → squad players, for the goal-scorer name suggestions.
   const squadMap = new Map<string, OFPlayer[]>()
@@ -188,6 +203,16 @@ export default async function AdminPage() {
             ))}
           </div>
         )}
+      </section>
+
+      {/* Reunion auction setup */}
+      <section>
+        <h2 className="text-base font-semibold mb-3 text-gray-700">Reunion Auction</h2>
+        <AdminAuctionSetup
+          players={auctionPlayers}
+          teams={auctionTeams}
+          profiles={captainOptions}
+        />
       </section>
     </div>
   )
